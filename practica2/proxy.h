@@ -18,6 +18,9 @@
 #include <string.h>
 #include <err.h>
 #include <fcntl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 
 enum operations {
 READY_TO_SHUTDOWN = 0,
@@ -48,9 +51,13 @@ void notify_ready_shutdown();
 // Notifica que va a realizar el shutdown correctamente (SHUTDOWN_ACK)
 void notify_shutdown_ack();
 
-// Envía un mensaje
-void send(struct message msg);
+int create_socket();
 
-// Recibir un mensaje
-void recieve(char *prc, struct message msg);
+void socket_connect(int socket);
+
+void bind_socket(int socket);
+
+void listen_socket(int socket);
+
+int accept_socket(int socket);
 #endif // PROXY_H
