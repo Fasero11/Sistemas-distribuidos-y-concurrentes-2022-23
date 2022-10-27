@@ -53,6 +53,8 @@ void notify_ready_shutdown();
 // Notifica que va a realizar el shutdown correctamente (SHUTDOWN_ACK)
 void notify_shutdown_ack();
 
+void notify_shutdown_now();
+
 void socket_create();
 
 void socket_connect();
@@ -63,7 +65,9 @@ void socket_listen();
 
 void socket_accept();
 
-void socket_recieve();
+void socket_recieve(int is_server);
 
 void socket_close();
+
+void get_action(char **action);
 #endif // PROXY_H

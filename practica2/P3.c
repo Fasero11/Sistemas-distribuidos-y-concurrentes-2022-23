@@ -17,7 +17,14 @@ int main(int argc, char **args) {
     DEBUG_PRINTF("P3 connecting...\n");
     socket_connect();
 
+    DEBUG_PRINTF("P3 send ready_shutdown 1\n");
     notify_ready_shutdown();
+
+    DEBUG_PRINTF("P3 recieving 1\n");
+    socket_recieve(0);
+
+    DEBUG_PRINTF("P3 send shutdown_ack 1\n");
+    notify_shutdown_ack();
 
     socket_close();
     return 0;

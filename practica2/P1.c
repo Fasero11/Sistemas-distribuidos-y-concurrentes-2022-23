@@ -14,10 +14,17 @@ int main(int argc, char **args) {
     DEBUG_PRINTF("P1 set IP and Port\n");
     set_ip_port("127.0.0.1",8080);
 
-    DEBUG_PRINTF("P1 connecting..\n");
+    DEBUG_PRINTF("P1 connecting...\n");
     socket_connect();
 
+    DEBUG_PRINTF("P1 send ready_shutdown 1\n");
     notify_ready_shutdown();
+
+    DEBUG_PRINTF("P1 recieving 1\n");
+    socket_recieve(0);
+
+    DEBUG_PRINTF("P1 send shutdown_ack 1\n");
+    notify_shutdown_ack();
 
     socket_close();
     return 0;
