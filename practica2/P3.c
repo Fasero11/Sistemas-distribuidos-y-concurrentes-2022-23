@@ -17,12 +17,15 @@ int main(int argc, char **args) {
     DEBUG_PRINTF("P3 connecting...\n");
     socket_connect();
 
+    // Send Lamport = 1
     DEBUG_PRINTF("P3 send ready_shutdown 1\n");
     notify_ready_shutdown();
 
+    // Recieve Lamport = 7
     DEBUG_PRINTF("P3 recieving 1\n");
-    socket_recieve(0);
+    socket_recieve(0,7);
 
+    // Send Lamport = 9
     DEBUG_PRINTF("P3 send shutdown_ack 1\n");
     notify_shutdown_ack();
 

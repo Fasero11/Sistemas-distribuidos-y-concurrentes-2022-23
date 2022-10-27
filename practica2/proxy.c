@@ -126,7 +126,8 @@ void socket_accept(){
     DEBUG_PRINTF("%s: Client Connected!. client_socket_: %d\n",proc_name ,client_socket_);
 };
 
-void socket_recieve(int is_server){
+void socket_recieve(int is_server, int expected_lamport){
+    DEBUG_PRINTF("Now recieving...\n");
     char *action;
     int recv_socket;
     struct message recv_msg;
@@ -137,12 +138,14 @@ void socket_recieve(int is_server){
         recv_socket = socket_;
     }
 
-    if (recv(recv_socket, (void *)&recv_msg, sizeof(recv_msg), 0) < 0){
-        warnx("recv() failed. %s\n", strerror(errno));
-        close(socket_);
-        close(client_socket_);
-        exit(1);
-    }
+    do{
+        if (recv(recv_socket, (void *)&recv_msg, sizeof(recv_msg), 0) < 0){
+            warnx("recv() failed. %s\n", strerror(errno));
+            close(socket_);
+            close(client_socket_);
+            exit(1);
+        }
+    } while (expected_lamport != recv_msg.clock_lamport);
 
     get_action(&action);
 

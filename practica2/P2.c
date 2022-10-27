@@ -2,6 +2,24 @@
 
 #include "proxy.h"
 
+void *talk_to_client(void *ptr){
+    printf("Talking to client...\n");
+
+    // Recieve Lamport = 1
+    DEBUG_PRINTF("P2 recieving 1\n");
+    socket_recieve(1, 1);
+
+    // Send Lamport = 3 / 7
+    DEBUG_PRINTF("P2 send shutdown_now 1\n");
+    notify_shutdown_now();
+
+    // Recieve Lamport = 5 / 9
+    DEBUG_PRINTF("P2 recieving 2\n");
+    socket_recieve(1, 5);
+
+    pthread_exit(NULL);
+}
+
 // Recieve from P1 & P3 READY_TO_SHUTDOWN
 // Send P1 SHUTDOWN_NOW
 // Recieve SHUTDOWN_ACK from P1
@@ -22,24 +40,17 @@ int main(int argc, char **args) {
     DEBUG_PRINTF("P2 listening\n");
     socket_listen();
 
-    DEBUG_PRINTF("P2 accepting\n");
-    socket_accept();
+    while (1){
+        // Accept connection
+        DEBUG_PRINTF("P2 accepting\n");
+        socket_accept();
 
-    DEBUG_PRINTF("P2 recieving 1\n");
-    socket_recieve(1);
-
-    DEBUG_PRINTF("P2 send shutdown_now 1\n");
-    notify_shutdown_now();
-
-    DEBUG_PRINTF("P2 recieving 2\n");
-    socket_recieve(1);
-
-    DEBUG_PRINTF("P2 send shutdown_now 2\n");
-    notify_shutdown_now();
-    
-    DEBUG_PRINTF("P2 recieving 3\n");
-    socket_recieve(1);
-
-    socket_close();
-    return 0;
+        DEBUG_PRINTF("New P2 Thread!\n");
+        pthread_t thread;
+        // Create Thread
+        if (pthread_create(&thread, NULL, talk_to_client, (void *)NULL) < 0){
+            warnx("Error while creating Thread\n");
+            socket_close();
+        }
+    }
 }

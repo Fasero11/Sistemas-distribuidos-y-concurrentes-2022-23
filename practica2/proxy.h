@@ -65,7 +65,7 @@ void socket_listen();
 
 void socket_accept();
 
-void socket_recieve(int is_server);
+void socket_recieve(int is_server, int expected_lamport);
 
 void socket_close();
 
