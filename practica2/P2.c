@@ -8,22 +8,26 @@
 // Send P3 SHITDOWN_NOW
 // Recieve SHUTDOWN_ACK from P3
 int main(int argc, char **args) {
+    set_name("P2");
 
     DEBUG_PRINTF("P2 create socket\n");
-    int  socket = create_socket();
+    socket_create();
 
     DEBUG_PRINTF("P2 set IP and Port\n");
     set_ip_port("0.0.0.0",8080);
 
     DEBUG_PRINTF("P2 binding\n");
-    bind_socket(socket);
+    socket_bind();
 
     DEBUG_PRINTF("P2 listening\n");
-    listen_socket(socket);
+    socket_listen();
 
     DEBUG_PRINTF("P2 accepting\n");
-    int client_socket = accept_socket(socket);
+    socket_accept();
 
-    close(socket);
+    DEBUG_PRINTF("P2 recieving\n");
+    socket_recieve();
+
+    socket_close();
     return 0;
 }

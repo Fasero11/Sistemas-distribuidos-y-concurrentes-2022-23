@@ -22,6 +22,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
+#define BUFFER_SIZE 1024
+
 enum operations {
 READY_TO_SHUTDOWN = 0,
 SHUTDOWN_NOW,
@@ -51,13 +53,17 @@ void notify_ready_shutdown();
 // Notifica que va a realizar el shutdown correctamente (SHUTDOWN_ACK)
 void notify_shutdown_ack();
 
-int create_socket();
+void socket_create();
 
-void socket_connect(int socket);
+void socket_connect();
 
-void bind_socket(int socket);
+void socket_bind();
 
-void listen_socket(int socket);
+void socket_listen();
 
-int accept_socket(int socket);
+void socket_accept();
+
+void socket_recieve();
+
+void socket_close();
 #endif // PROXY_H

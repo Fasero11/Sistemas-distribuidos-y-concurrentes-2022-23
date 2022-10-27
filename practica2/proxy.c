@@ -3,12 +3,13 @@
 #include "proxy.h"
 
 struct message msg;
-struct sockaddr_in addr;
-struct sockaddr_in client_addr;
+struct sockaddr_in addr, client_addr;
+char proc_name[2];
+int socket_, client_socket_;
 
 // Establece el nombre del proceso (para los logs y trazas)
 void set_name (char name[2]){
-    printf("change name 2\n");
+    strcpy(proc_name,name);
 };
     
 // Establecer ip y puerto
@@ -17,70 +18,96 @@ void set_ip_port (char* ip, unsigned int port){
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = inet_addr(ip);
 
-    DEBUG_PRINTF("IP set: %s | Port set: %d \n",ip, port);
+    DEBUG_PRINTF("%s: IP set: %s | Port set: %d \n",proc_name ,ip, port);
 };
 
 // Obtiene el valor del reloj de lamport.
 // Utilízalo cada vez que necesites consultar el tiempo.
 // Esta función NO puede realizar ningún tiempo de comunicación (sockets)
-int get_clock_lamport();
+int get_clock_lamport(){
+    return 0;
+};
 
 // Notifica que está listo para realizar el apagado (READY_TO_SHUTDOWN)
-void notify_ready_shutdown();
+void notify_ready_shutdown(){
+
+    strcpy(msg.origin, proc_name);
+    msg.action = READY_TO_SHUTDOWN;
+    msg.clock_lamport = get_clock_lamport() + 1;
+
+    if (send(socket_, (void *)&msg, sizeof(msg), 0) < 0){
+        warnx("send() failed. %s\n", strerror(errno));
+        close(socket_);
+        exit(1);
+    }
+    DEBUG_PRINTF("%s: Notify Ready_Shutdown \n",proc_name);
+};
 
 // Notifica que va a realizar el shutdown correctamente (SHUTDOWN_ACK)
 void notify_shutdown_ack();
 
-int create_socket(){
+void socket_create(){
     setbuf(stdout, NULL);
-    int sckt = socket(AF_INET, SOCK_STREAM, 0);
-    if (sckt < 0){
-        warnx("Error creating socket. %s\n",strerror(errno));
+    socket_ = socket(AF_INET, SOCK_STREAM, 0);
+    if (socket_ < 0){
+        warnx("%s: Error creating socket. %s\n",proc_name ,strerror(errno));
         exit(1); 
     }
-    DEBUG_PRINTF("Socket successfully created...\n");
-    return sckt;
+    DEBUG_PRINTF("%s: Socket successfully created...\n",proc_name );
 };
 
-void socket_connect(int socket){
-    while (connect(socket, (struct sockaddr *)&addr, sizeof(addr)) != 0){
-        //DEBUG_PRINTF("Server not found\n");
+void socket_connect(){
+    while (connect(socket_, (struct sockaddr *)&addr, sizeof(addr)) != 0){
+        //DEBUG_PRINTF("%s: Server not found\n",proc_name );
     }
-    DEBUG_PRINTF ("Connected to server...\n");
+    DEBUG_PRINTF ("%s: Connected to server...\n",proc_name );
 };
 
-void bind_socket(int socket){
-    if (bind(socket, (struct sockaddr*)&addr, 
+void socket_bind(){
+    if (bind(socket_, (struct sockaddr*)&addr, 
     sizeof(addr)) < 0){
-        warnx("bind() failed. %s\n", strerror(errno));
-        close(socket);
+        warnx("%s: bind() failed. %s\n",proc_name , strerror(errno));
+        close(socket_);
         exit(1); 
     }
-    DEBUG_PRINTF("Socket successfully binded...\n");
-    DEBUG_PRINTF("Binded to port: %d\n", addr.sin_port);
+    DEBUG_PRINTF("%s: Socket successfully binded...\n",proc_name );
+    DEBUG_PRINTF("%s: Binded to port: %d\n",proc_name , addr.sin_port);
 
 };
 
-void listen_socket(int socket){
-    DEBUG_PRINTF("Socket listening...\n");
-    if (listen(socket, 5) < 0){
-        warnx("listen() failed. %s\n", strerror(errno));
-        close(socket);
+void socket_listen(){
+    DEBUG_PRINTF("%s: Socket listening...\n",proc_name );
+    if (listen(socket_, 5) < 0){
+        warnx("%s: listen() failed. %s\n",proc_name , strerror(errno));
+        close(socket_);
         exit(1);        
     }
 };
 
-int accept_socket(int socket){
+void socket_accept(){
     socklen_t addr_size = sizeof(client_addr);
-    int client_socket = accept(socket, (struct sockaddr*)&client_addr, 
+    client_socket_ = accept(socket_, (struct sockaddr*)&client_addr, 
     &addr_size);
 
-    if (client_socket < 0){
-        warnx("accept() failed. %s\n", strerror(errno));
-        close(client_socket);
-        close(socket);
+    if (client_socket_ < 0){
+        warnx("%s: accept() failed. %s\n",proc_name , strerror(errno));
+        close(client_socket_);
+        close(socket_);
         exit(1);
     }
-    DEBUG_PRINTF("Client Connected!. client_socket: %d\n",client_socket);
-    return client_socket;
+    DEBUG_PRINTF("%s: Client Connected!. client_socket_: %d\n",proc_name ,client_socket_);
+};
+
+void socket_recieve(){
+    if (recv(client_socket_, (void *)&msg, sizeof(msg), 0) < 0){
+        warnx("recv() failed. %s\n", strerror(errno));
+        close(socket_);
+        close(client_socket_);
+        exit(1);
+    }
+    printf("+++ %s, %d, %d\n", msg.origin, msg.action ,msg.clock_lamport);
+}
+
+void socket_close(){
+    close(socket_);
 };
