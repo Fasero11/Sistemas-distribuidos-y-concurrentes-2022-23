@@ -146,9 +146,16 @@ void socket_receive(int is_server, int expected_lamport){
     
     if (is_server){
         do{
-            do_receive_in_socket(client_socket_1_, &recv_msg);
+            DEBUG_PRINTF("recv 1\n");
+            if (do_receive_in_socket(client_socket_1_, &recv_msg)){
+                if (expected_lamport == recv_msg.clock_lamport){
+                    continue;
+                }
+            };
+            DEBUG_PRINTF("recv 2\n");
             do_receive_in_socket(client_socket_2_, &recv_msg);
     } while (expected_lamport != recv_msg.clock_lamport);
+    
     } else {
         do{
             if (recv(socket_, (void *)&recv_msg, sizeof(recv_msg), 0) < 0){
@@ -193,9 +200,13 @@ void get_action(char **action, int in_action){
     }
 };
 
-void do_receive_in_socket(int socket, struct message *recv_msg){
+int do_receive_in_socket(int socket, struct message *recv_msg){
+    // Returns 1 if anything was read.
+    // 0 otherwise.
+
     fd_set readmask;
     struct timeval timeout;
+    int is_data = 0;
 
     FD_ZERO(&readmask); // Reset la mascara
     FD_SET(socket, &readmask); // Asignamos el nuevo descriptor
@@ -217,5 +228,7 @@ void do_receive_in_socket(int socket, struct message *recv_msg){
             close(socket_);
             exit(1);
         }
+        is_data = 1;
     }
+    return is_data;
 };

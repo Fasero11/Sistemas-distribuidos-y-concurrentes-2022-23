@@ -8,8 +8,8 @@ void *receive(void *ptr){
     DEBUG_PRINTF("P2 recieving 1\n");
     socket_receive(1, expected_lamport[0]);
 
-    // DEBUG_PRINTF("P2 recieving 1\n");
-    // socket_receive(1, expected_lamport[1]);
+    DEBUG_PRINTF("P2 recieving 1\n");
+    socket_receive(1, expected_lamport[1]);
 
     // Send Lamport = 7
     DEBUG_PRINTF("P2 send shutdown_now 1\n");
@@ -54,34 +54,18 @@ int main(int argc, char **args) {
     DEBUG_PRINTF("P2 accepting\n");
     socket_accept();
 
-  
     DEBUG_PRINTF("New P2 Thread!\n");  
     pthread_t thread1;
-   // Recieve Lamport = 1, 5
     if (pthread_create(&thread1, NULL, receive, (void *)&expected_lamport_1) < 0){
         warnx("Error while creating Thread\n");
         socket_close();
     }
-
-//     DEBUG_PRINTF("New P2 Thread!\n");
-//     pthread_t thread2;
-//    // Recieve Lamport = 1, 9
-//     if (pthread_create(&thread2, NULL, receive, (void *)&expected_lamport_2) < 0){
-//         warnx("Error while creating Thread\n");
-//         socket_close();
-//     }
 
     if (pthread_join(thread1, NULL) < 0) {
         warnx("Error while joining Thread\n");
         socket_close();
         exit(1);
     };
-
-    // if (pthread_join(thread2, NULL) < 0) {
-    //     warnx("Error while joining Thread\n");
-    //     socket_close();
-    //     exit(1);
-    // };
 
     printf("Los clientes fueron correctamente apagados en t(lamport) = %d\n",get_clock_lamport());
 }

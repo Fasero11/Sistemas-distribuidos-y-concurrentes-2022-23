@@ -73,6 +73,6 @@ void socket_close();
 
 void get_action(char **action, int in_action);
 
-void do_receive_in_socket(int socket, struct message *recv_msg);
+int do_receive_in_socket(int socket, struct message *recv_msg);
 
 #endif // PROXY_H
