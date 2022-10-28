@@ -21,6 +21,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <sys/select.h>
+#include <signal.h>
 
 #define BUFFER_SIZE 1024
 
@@ -65,9 +67,12 @@ void socket_listen();
 
 void socket_accept();
 
-void socket_recieve(int is_server, int expected_lamport);
+void socket_receive(int is_server, int expected_lamport);
 
 void socket_close();
 
-void get_action(char **action);
+void get_action(char **action, int in_action);
+
+void do_receive_in_socket(int socket, struct message *recv_msg);
+
 #endif // PROXY_H
