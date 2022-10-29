@@ -35,14 +35,24 @@ void *receive(void *ptr){
 // Recieve SHUTDOWN_ACK from P3
 int main(int argc, char **args) {
     int expected_lamport_1[4] = {1,1,5,9};
-    // int expected_lamport_2[2] = {1,9};
+    char* ip;
+    unsigned int port;
+
+    if (argc != 3){
+        printf("usage: P1 IP PORT\n");
+        exit(1);
+    };
+
+    ip = args[1];
+    port = atoi(args[2]);
+
     set_name("P2");
 
     DEBUG_PRINTF("P2 create socket\n");
     socket_create();
 
     DEBUG_PRINTF("P2 set IP and Port\n");
-    set_ip_port("0.0.0.0",8080);
+    set_ip_port(ip,port);
 
     DEBUG_PRINTF("P2 binding\n");
     socket_bind();
