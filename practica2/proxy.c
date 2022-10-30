@@ -215,7 +215,7 @@ int do_receive_in_socket(int socket, struct message *recv_msg){
     }
 
     if (FD_ISSET(socket, &readmask)){
-        // Data received in socket
+        // Datos recibidos en el socket
         if (recv(socket, (void *)recv_msg, sizeof(*recv_msg), MSG_DONTWAIT) < 0){
             warnx("recv() failed. %s\n", strerror(errno));
             close(socket);
