@@ -3,25 +3,29 @@
 #include "proxy.h"
 
 void *receive(void *ptr){
-
     int *expected_lamport = (int*)ptr;
+
+    // Recibe valor lamport = 1
     DEBUG_PRINTF("P2 recieving 1\n");
     socket_receive(1, expected_lamport[0]);
 
+    // Recibe valor lamport = 1
     DEBUG_PRINTF("P2 recieving 1\n");
     socket_receive(1, expected_lamport[1]);
 
-    // Send Lamport = 3
+    // Envía valor lamport = 3
     DEBUG_PRINTF("P2 send shutdown_now 1\n");
     notify_shutdown_now();
 
+    // Recibe valor lamport = 5
     DEBUG_PRINTF("P2 recieving 1\n");
     socket_receive(1, expected_lamport[2]);
 
-    // Send Lamport = 7
+    // Envía valor lamport = 7
     DEBUG_PRINTF("P2 send shutdown_now 1\n");
     notify_shutdown_now();
 
+    // Recibe valor lamport = 9
     DEBUG_PRINTF("P2 recieving 1\n");
     socket_receive(1, expected_lamport[3]);
     

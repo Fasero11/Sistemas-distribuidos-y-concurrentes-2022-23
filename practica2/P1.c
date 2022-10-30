@@ -3,7 +3,7 @@
 #include "proxy.h"
 
 void *receive(void *ptr){
-    // Recieve Lamport = 3
+    // Recibe valor lamport = 3
     DEBUG_PRINTF("P1 recieving 1\n");
     socket_receive(0, 3);
 
@@ -37,7 +37,7 @@ int main(int argc, char **args) {
     DEBUG_PRINTF("P1 connecting...\n");
     socket_connect();
 
-    // Send Lamport = 1
+    // Envía valor lamport = 1
     DEBUG_PRINTF("P1 send ready_shutdown 1\n");
     notify_ready_shutdown();
 
@@ -55,7 +55,7 @@ int main(int argc, char **args) {
         exit(1);
     };
 
-    // Send Lamport = 5
+    // Envía valor lamport = 5
     DEBUG_PRINTF("P1 send shutdown_ack 1\n");
     notify_shutdown_ack();
 
