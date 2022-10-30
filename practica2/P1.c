@@ -10,9 +10,10 @@ void *receive(void *ptr){
     pthread_exit(NULL);
 };
 
-// Send P2 READY_TO_SHUTDOWN
-// Recieve from P2 SHUTDOWN_NOW
-// Send P2 SHUTDOWN_ACK
+// CLIENTE: P1
+// Envía a P2 READY_TO_SHUTDOWN
+// Recibe de P2 SHUTDOWN_NOW
+// Envía a P2 SHUTDOWN_ACK
 int main(int argc, char **args) {
     char* ip;
     unsigned int port;
@@ -41,16 +42,16 @@ int main(int argc, char **args) {
     notify_ready_shutdown();
 
     pthread_t thread;
-    // Create Thread
+
     if (pthread_create(&thread, NULL, receive, (void *)NULL) < 0){
         warnx("Error while creating Thread\n");
-        socket_close();
+        socket_close(0);
         exit(1);
     };
 
     if (pthread_join(thread, NULL) < 0) {
         warnx("Error while joining Thread\n");
-        socket_close();
+        socket_close(0);
         exit(1);
     };
 
@@ -58,6 +59,6 @@ int main(int argc, char **args) {
     DEBUG_PRINTF("P1 send shutdown_ack 1\n");
     notify_shutdown_ack();
 
-    socket_close();
+    socket_close(0);
     return 0;
 };

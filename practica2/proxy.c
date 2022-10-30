@@ -8,12 +8,10 @@ char proc_name[2];
 int socket_, client_socket_1_, client_socket_2_;
 int lamport_ = 0;
 
-// Establece el nombre del proceso (para los logs y trazas)
 void set_name (char name[2]){
     strcpy(proc_name,name);
 };
     
-// Establecer ip y puerto
 void set_ip_port (char* ip, unsigned int port){
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
@@ -22,14 +20,10 @@ void set_ip_port (char* ip, unsigned int port){
     DEBUG_PRINTF("%s: IP set: %s | Port set: %d \n",proc_name ,ip, port);
 };
 
-// Obtiene el valor del reloj de lamport.
-// Utilízalo cada vez que necesites consultar el tiempo.
-// Esta función NO puede realizar ningún tiempo de comunicación (sockets)
 int get_clock_lamport(){
     return lamport_;
 };
 
-// Notifica que está listo para realizar el apagado (READY_TO_SHUTDOWN)
 void notify_ready_shutdown(){
 
     strcpy(msg.origin, proc_name);
@@ -45,7 +39,6 @@ void notify_ready_shutdown(){
     printf("%s, %d, SEND, READY_TO_SHUTDOWN\n", proc_name, lamport_);
 };
 
-// Notifica que va a realizar el shutdown correctamente (SHUTDOWN_ACK)
 void notify_shutdown_ack(){
     strcpy(msg.origin, proc_name);
     msg.action = SHUTDOWN_ACK;
@@ -179,8 +172,12 @@ void socket_receive(int is_server, int expected_lamport){
     lamport_, recv_msg.origin, action);
 }
 
-void socket_close(){
+void socket_close(int is_server){
     close(socket_);
+    if (is_server){
+        close(client_socket_1_);
+        close(client_socket_2_);       
+    }
 };
 
 void get_action(char **action, int in_action){
@@ -201,9 +198,6 @@ void get_action(char **action, int in_action){
 };
 
 int do_receive_in_socket(int socket, struct message *recv_msg){
-    // Returns 1 if anything was read.
-    // 0 otherwise.
-
     fd_set readmask;
     struct timeval timeout;
     int is_data = 0;
