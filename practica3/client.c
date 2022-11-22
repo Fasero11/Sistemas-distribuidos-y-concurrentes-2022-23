@@ -8,7 +8,7 @@ void print_usage() {
 
 int main(int argc, char **argv) {
     int opt = 0;
-    int port, threads;
+    int port, thread_num;
     char *ip;
     char *mode;
 
@@ -25,32 +25,58 @@ int main(int argc, char **argv) {
         switch (opt) {
             case 'i':
                 ip = optarg;
-                DEBUG_PRINTF("ip: %s\n",ip);
                 break;
             case 'p':
                 port = atoi(optarg);
-                DEBUG_PRINTF("port: %d\n",port);
                 break;
             case 'm':
                 mode = optarg;
-                DEBUG_PRINTF("mode: %s\n",mode);
                 break;
             case 't':
-                threads = atoi(optarg);
-                DEBUG_PRINTF("threads: %d\n", threads);
+                thread_num = atoi(optarg);
                 break;
-            default: print_usage(); 
-                 exit(EXIT_FAILURE);
+            default: 
+                print_usage(); 
+                exit(EXIT_FAILURE);
         }
     }
 
-    // if (threads <= 0 || strcmp(mode, "writer") != 0 || strcmp(mode, "reader") != 0  ) {
-    //     DEBUG_PRINTF("Argument Failure\n");
-    //     print_usage();
-    //     exit(EXIT_FAILURE);
-    // }
+    if (thread_num <= 0 || (strcmp(mode, "writer") != 0 && strcmp(mode, "reader") != 0)) {
+        print_usage();
+        exit(EXIT_FAILURE);
+    }
 
-    DEBUG_PRINTF("IP: %s | PORT: %d | MODE: %s | THREADS: %d\n", ip, port, mode, threads);
+    DEBUG_PRINTF("IP: %s | PORT: %d | MODE: %s | THREADS: %d\n", ip, port, mode, thread_num);
+    
+    struct client_threads client_threads[thread_num];
+    pthread_t all_threads[thread_num];
+
+    set_name("Client");
+
+    DEBUG_PRINTF("Client create socket\n");
+    socket_create();
+
+    DEBUG_PRINTF("Client set IP and Port\n");
+    set_ip_port(ip,port);
+
+    int i;
+    for (i = 0; i < thread_num; i++){
+        client_threads[i].mode = mode;
+        client_threads[i].thread_id = i;
+        if (pthread_create(&all_threads[i], NULL, talk_2_server, (void *)&client_threads[i]) < 0){
+            warnx("Error while creating Thread\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    for (i = 0; i < thread_num; i++){
+        if (pthread_join(all_threads[i], NULL) < 0) {
+            warnx("Error while joining Thread\n");
+            exit(1);
+        };
+    }
+
+    close_client();
 
     exit(EXIT_SUCCESS);
 }
