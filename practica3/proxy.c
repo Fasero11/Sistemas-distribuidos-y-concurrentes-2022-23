@@ -4,7 +4,7 @@
 pthread_mutex_t mutex;
 struct sockaddr_in addr, client_addr_;
 char proc_name[6];
-int socket_, client_socket_, counter = 0;
+int counter = 0;
 
 void set_name (char name[6]){
     strcpy(proc_name,name);
@@ -18,24 +18,26 @@ void set_ip_port (char* ip, unsigned int port){
     DEBUG_PRINTF("%s: IP set: %s | Port set: %d \n",proc_name ,ip, port);
 };
 
-void socket_create(){
+int socket_create(){
     setbuf(stdout, NULL);
-    socket_ = socket(AF_INET, SOCK_STREAM, 0);
+    int socket_ = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_ < 0){
         warnx("%s: Error creating socket. %s\n",proc_name ,strerror(errno));
         exit(1); 
     }
     DEBUG_PRINTF("%s: Socket successfully created...\n",proc_name );
+
+    return socket_;
 };
 
-void socket_connect(){
+void socket_connect(int socket_){
     while (connect(socket_, (struct sockaddr *)&addr, sizeof(addr)) != 0){
-        DEBUG_PRINTF("%s: Server not found\n",proc_name );
+        //DEBUG_PRINTF("%s: Server not found\n",proc_name );
     }
     DEBUG_PRINTF ("%s: Connected to server...\n",proc_name );
 };
 
-void socket_bind(){
+void socket_bind(int socket_){
     if (bind(socket_, (struct sockaddr*)&addr, 
     sizeof(addr)) < 0){
         warnx("%s: bind() failed. %s\n",proc_name , strerror(errno));
@@ -46,16 +48,17 @@ void socket_bind(){
     DEBUG_PRINTF("%s: Binded to port: %d\n",proc_name , addr.sin_port);
 };
 
-void socket_listen(){
+void socket_listen(int socket_){
     DEBUG_PRINTF("%s: Socket listening...\n",proc_name );
-    if (listen(socket_, 5) < 0){
+    if (listen(socket_, 1000) < 0){
         warnx("%s: listen() failed. %s\n",proc_name , strerror(errno));
         close(socket_);
         exit(1);        
     }
 };
 
-void socket_accept(){
+int socket_accept(int socket_){
+    int client_socket_;
     socklen_t addr_size_ = sizeof(client_addr_);
     client_socket_ = accept(socket_, (struct sockaddr*)&client_addr_, 
     &addr_size_);
@@ -68,16 +71,16 @@ void socket_accept(){
         exit(1);
     }
 
+    return client_socket_;
 };
 
 // // // // // // SERVER ONLY // // // // // //
 
-struct request receive_request(){
+struct request receive_request(int client_socket_){
     struct request recv_msg;
 
     if (recv(client_socket_, (void *)&recv_msg, sizeof(recv_msg), 0) < 0){
         warnx("recv() failed. %s\n", strerror(errno));
-        close(socket_);
         exit(1);
     }  
 
@@ -86,7 +89,7 @@ struct request receive_request(){
     return recv_msg;
 }
 
-void send_response(struct response response){
+void send_response(struct response response, int client_socket_){
 
     if (send(client_socket_, (void *)&response, sizeof(response), 0) < 0){
         warnx("send() failed. %s\n", strerror(errno));
@@ -95,7 +98,8 @@ void send_response(struct response response){
 }
 
 struct response do_request(struct request request){
-    char* action;
+    char *action; 
+    char *verb;
     struct response response;
     struct timespec sleep_time;
     struct timespec wait_time_start;
@@ -110,6 +114,7 @@ struct response do_request(struct request request){
     }
     // // // // REGIÓN CRÍTICA // // // //
     pthread_mutex_lock(&mutex);
+    DEBUG_PRINTF("LOCK\n");
     if (clock_gettime(CLOCK_MONOTONIC, &wait_time_end) != 0){
         warnx("clock_gettime() failed. %s\n",strerror(errno));
         exit(1);
@@ -118,45 +123,64 @@ struct response do_request(struct request request){
     if (request.action == WRITE){
         counter++;
         action = "ESCRITOR";
+        verb = "modifica";
     } else {
         action = "LECTOR";
+        verb = "lee";
     }
 
     // Sleep. (Task leaves CPU)
     DEBUG_PRINTF("Sleeping for %ld ms\n",sleep_time.tv_nsec/1000000);
     if (nanosleep(&sleep_time, NULL) < 0){
         warnx("nanosleep() failed. %s\n",strerror(errno));
+        pthread_mutex_unlock(&mutex);
         exit(1);
     }
 
-    printf("[%ld] [%s #%d] modifica contador con valor %d\n",
-    sleep_time.tv_nsec/1000,action ,request.id, counter);
+    printf("[%ld] [%s #%d] %s contador con valor %d\n",
+    sleep_time.tv_nsec/1000, action, request.id, verb, counter);
 
     write_output();
+
+    DEBUG_PRINTF("UNLOCK\n");
     pthread_mutex_unlock(&mutex);
     // // // // // // // // // // // //
 
     response.action = request.action;
     response.counter = counter;
-    int waited_seconds = wait_time_end.tv_sec - wait_time_start.tv_sec;
+    int waited_sec = wait_time_end.tv_sec - wait_time_start.tv_sec;
     long waited_nsec = wait_time_end.tv_nsec - wait_time_start.tv_nsec;
-    long waited_total_us = waited_seconds * 1000000 + waited_nsec / 1000;
-    response.waiting_time = waited_total_us;
+    long waited_total_ns =  waited_nsec + waited_sec*1000000000;
+    response.waiting_time = waited_total_ns;
 
     return response;
 }
 
 
-void close_server(){
+void close_client_socket(int client_socket_){
     close(client_socket_);
-    close(socket_);
 }
 
 void write_output(){
     FILE *fpt;
-    fpt = fopen("server_output.txt",  "a");
+    fpt = fopen("server_output.txt",  "w");
     fprintf(fpt,"%d",counter);
     fclose(fpt);
+}
+
+void *talk_2_client(void *ptr){
+    int client_socket_ = *(int*)ptr;
+
+    DEBUG_PRINTF("Thread receiving. Client_socket: %d\n", client_socket_);
+    struct request request = receive_request(client_socket_);
+
+    DEBUG_PRINTF("Thread doing request Client_socket: %d\n", client_socket_);
+    struct response response = do_request(request);
+
+    DEBUG_PRINTF("Thread Sending response Client_socket: %d\n", client_socket_);
+    send_response(response, client_socket_);
+
+    pthread_exit(NULL);
 }
 // // // // // // // // // // // // // // // //
 
@@ -168,14 +192,15 @@ void *talk_2_server(void *ptr){
     char *response_mode;
     struct response response;
     struct request request;
-    struct client_threads *client_threads = ((struct client_threads *)ptr);
-    char *mode = client_threads->mode;
-    int thread_id = client_threads->thread_id;
+    struct client_threads *client_threads_ = ((struct client_threads *)ptr);
+    int socket_ =  client_threads_->socket;
+    char *mode = client_threads_->mode;
+    int thread_id = client_threads_->thread_id;
     enum operations action;
     action = WRITE;
 
-    DEBUG_PRINTF("Client %d connecting... (%s)\n",thread_id, mode);
-    socket_connect();
+    //DEBUG_PRINTF("Client %d connecting... (%s)\n",thread_id, mode);
+    socket_connect(socket_);
 
     if (strcmp(mode, "reader") == 0){
         action = READ;
@@ -183,14 +208,14 @@ void *talk_2_server(void *ptr){
 
     request.action = action;
     request.id = thread_id;
-    DEBUG_PRINTF("action: %d, id: %d\n", request.action, request.id);
+    DEBUG_PRINTF("SENT: action: %d, id: %d\n", request.action, request.id);
 
     if (send(socket_, (void *)&request, sizeof(request), 0) < 0){
         warnx("send() failed. %s\n", strerror(errno));
         exit(1);
     }
 
-    response = receive_response();
+    response = receive_response(socket_);
 
     if (response.action == READ){
         response_mode = "Lector";
@@ -205,7 +230,7 @@ void *talk_2_server(void *ptr){
 };
 
 
-struct response receive_response(){
+struct response receive_response(int socket_){
     struct response recv_msg;
 
     if (recv(socket_, (void *)&recv_msg, sizeof(recv_msg), 0) < 0){
@@ -217,7 +242,7 @@ struct response receive_response(){
     return recv_msg;
 }
 
-void close_client(){
+void close_client(int socket_){
     close(socket_);
 }
 // // // // // // // // // // // // // // // //
