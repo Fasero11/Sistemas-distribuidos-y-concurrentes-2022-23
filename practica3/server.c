@@ -54,8 +54,13 @@ int main(int argc, char **argv) {
     //DEBUG_PRINTF("Server listening\n");
     socket_listen(socket);
 
+    set_priority(priority);
+
+    read_output();
+
     int i = 0;
-    while (current_threads < MAX_THREADS){
+    while (get_current_threads() < MAX_THREADS){
+        DEBUG_PRINTF("CURRENT THREADS: %d\n", get_current_threads());
         pthread_t new_thread;
 
         //DEBUG_PRINTF("Server accepting. Current Threads: %d\n",current_threads);
@@ -68,8 +73,6 @@ int main(int argc, char **argv) {
         }
 
         i++;
-        current_threads++;
-
-        //sleep(1);
+        set_current_threads();
     }
 };

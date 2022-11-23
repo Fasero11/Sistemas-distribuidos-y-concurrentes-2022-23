@@ -86,6 +86,14 @@ void close_client(int socket_);
 
 void write_output();
 
+void read_output();
+
 void *talk_2_client(void *ptr);
+
+void set_priority(char *priority);
+
+void set_current_threads();
+
+int get_current_threads();
 
 #endif // PROXY_H

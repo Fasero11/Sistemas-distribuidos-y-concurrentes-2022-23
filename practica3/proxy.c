@@ -2,9 +2,37 @@
 
 #include "proxy.h"
 pthread_mutex_t mutex;
+pthread_mutex_t counter_mutex;
+pthread_mutex_t current_threads_mutex;
 struct sockaddr_in addr, client_addr_;
 char proc_name[6];
 int counter = 0;
+int current_readers = 0;
+int current_writers = 0;
+int current_threads = 0;
+int priority;
+
+void set_priority(char *prio){
+    if (strcmp(prio, "reader") == 0){
+        priority = READ;
+        DEBUG_PRINTF("PRIORITY SET TO READ\n");
+    } else {
+        priority = WRITE;
+        DEBUG_PRINTF("PRIORITY SET TO WRITE\n");
+    }
+
+
+}
+
+void set_current_threads (){
+    pthread_mutex_lock(&current_threads_mutex);
+    current_threads++;
+    pthread_mutex_unlock(&current_threads_mutex);
+};
+
+int get_current_threads (){
+    return current_threads;
+};
 
 void set_name (char name[6]){
     strcpy(proc_name,name);
@@ -31,10 +59,11 @@ int socket_create(){
 };
 
 void socket_connect(int socket_){
-    while (connect(socket_, (struct sockaddr *)&addr, sizeof(addr)) != 0){
-        //DEBUG_PRINTF("%s: Server not found\n",proc_name );
+    if (connect(socket_, (struct sockaddr *)&addr, sizeof(addr)) != 0){
+        DEBUG_PRINTF("Error connecting\n");
+        exit(EXIT_FAILURE);
     }
-    DEBUG_PRINTF ("%s: Connected to server...\n",proc_name );
+    //DEBUG_PRINTF ("%s: Connected to server...\n",proc_name );
 };
 
 void socket_bind(int socket_){
@@ -98,6 +127,7 @@ void send_response(struct response response, int client_socket_){
 }
 
 struct response do_request(struct request request){
+    int locked = 0;
     char *action; 
     char *verb;
     struct response response;
@@ -113,7 +143,11 @@ struct response do_request(struct request request){
         exit(1);
     }
     // // // // REGIÓN CRÍTICA // // // //
-    pthread_mutex_lock(&mutex);
+    if (current_writers > 0){
+        pthread_mutex_lock(&mutex);
+        locked = 1;
+    } 
+   
     DEBUG_PRINTF("LOCK\n");
     if (clock_gettime(CLOCK_MONOTONIC, &wait_time_end) != 0){
         warnx("clock_gettime() failed. %s\n",strerror(errno));
@@ -142,8 +176,22 @@ struct response do_request(struct request request){
 
     write_output();
 
-    DEBUG_PRINTF("UNLOCK\n");
-    pthread_mutex_unlock(&mutex);
+
+
+    pthread_mutex_lock(&counter_mutex);
+    
+    if (request.action == READ){
+        current_readers--;
+    } else {
+        current_writers--;
+    }
+
+    pthread_mutex_unlock(&counter_mutex);
+
+    if (locked){
+        DEBUG_PRINTF("UNLOCK\n");
+        pthread_mutex_unlock(&mutex);
+    }
     // // // // // // // // // // // //
 
     response.action = request.action;
@@ -168,17 +216,40 @@ void write_output(){
     fclose(fpt);
 }
 
+void read_output(){
+    char buffer[20];
+    FILE *fpt;
+    fpt = fopen("server_output.txt",  "r");
+    while (fgets(buffer, sizeof(buffer), fpt) != NULL) {}
+    fclose(fpt);
+    counter = atoi(buffer);
+}
+
 void *talk_2_client(void *ptr){
     int client_socket_ = *(int*)ptr;
 
     DEBUG_PRINTF("Thread receiving. Client_socket: %d\n", client_socket_);
     struct request request = receive_request(client_socket_);
 
+    pthread_mutex_lock(&counter_mutex);
+    
+    if (request.action == READ){
+        current_readers++;
+    } else {
+        current_writers++;
+    }
+
+    pthread_mutex_unlock(&counter_mutex);
+
     DEBUG_PRINTF("Thread doing request Client_socket: %d\n", client_socket_);
     struct response response = do_request(request);
 
     DEBUG_PRINTF("Thread Sending response Client_socket: %d\n", client_socket_);
     send_response(response, client_socket_);
+
+    pthread_mutex_lock(&current_threads_mutex);
+        current_threads--;
+    pthread_mutex_unlock(&current_threads_mutex);
 
     pthread_exit(NULL);
 }
@@ -205,7 +276,7 @@ void *talk_2_server(void *ptr){
     if (strcmp(mode, "reader") == 0){
         action = READ;
     }
-
+    
     request.action = action;
     request.id = thread_id;
     DEBUG_PRINTF("SENT: action: %d, id: %d\n", request.action, request.id);
