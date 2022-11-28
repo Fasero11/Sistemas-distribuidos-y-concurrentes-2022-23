@@ -20,6 +20,30 @@ int priority;
 int ratio;
 int ratio_counter;
 
+int init_server(char* ip, int port, char* priority_, int ratio_){
+    int fd = 0;
+
+    //DEBUG_PRINTF("Server create socket\n");
+    fd = socket_create();
+
+    //DEBUG_PRINTF("Server set IP and Port\n");
+    set_ip_port(ip,port);
+
+    //DEBUG_PRINTF("Server binding\n");
+    socket_bind(fd);
+
+    //DEBUG_PRINTF("Server listening\n");
+    socket_listen(fd);
+
+    set_priority(priority_);
+
+    set_ratio(ratio_);
+
+    read_output();
+
+    return fd;
+}
+
 void set_ratio(int value){
     ratio = value;
 };

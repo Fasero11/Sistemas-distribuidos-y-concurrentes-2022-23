@@ -42,31 +42,13 @@ int main(int argc, char **argv) {
         print_usage();
         exit(EXIT_FAILURE);
     }
-    DEBUG_PRINTF("C\n");
-    //DEBUG_PRINTF("PORT: %d | PRIORITY: %s\n", port, priority);
-
-    //DEBUG_PRINTF("Server create socket\n");
-    int socket = socket_create();
-
-    //DEBUG_PRINTF("Server set IP and Port\n");
-    set_ip_port(ip,port);
-
-    //DEBUG_PRINTF("Server binding\n");
-    socket_bind(socket);
-
-    //DEBUG_PRINTF("Server listening\n");
-    socket_listen(socket);
-
-    set_priority(priority);
-
-    set_ratio(ratio);
-
-    read_output();
+    
+    int fd = init_server(ip, port, priority, ratio);
 
     while (1){
         pthread_t new_thread;
 
-        int client_socket_ = socket_accept(socket);
+        int client_socket_ = socket_accept(fd);
         int id = get_free_fd();
         set_value_fd (id, client_socket_);
 

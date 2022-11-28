@@ -50,6 +50,8 @@ unsigned int counter;
 long waiting_time;
 };
 
+int init_server(char* ip, int port, char* priority_, int ratio_);
+
 // Establece el nombre del proceso (para los logs y trazas)
 void set_name (char name[6]);
 
