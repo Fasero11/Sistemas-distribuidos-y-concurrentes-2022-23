@@ -3,18 +3,20 @@
 #include "proxy.h"
 
 void print_usage() {
-    printf("Usage: client --ip IP --port PORT --mode writer/reader --threads N\n");
+    printf("Usage: client --ip IP --port PORT --mode writer/reader --threads N --ratio M\n");
 }
 
 int main(int argc, char **argv) {
     int opt = 0;
     int port;
     char *priority;
+    int ratio = 0;
     char *ip = "0.0.0.0";
 
     static struct option long_options[] = {
         {"port",    required_argument,  NULL,  'p' },
         {"priority",    required_argument,  NULL,  'm' },
+        {"ratio",    required_argument,  NULL,  'r' },
         {0,         0,                  0,     0   }
     };
 
@@ -27,6 +29,9 @@ int main(int argc, char **argv) {
             case 'm':
                 priority = optarg;
                 break;
+            case 'r':
+                ratio = atoi(optarg);
+                break;
             default: 
                 print_usage(); 
                 exit(EXIT_FAILURE);
@@ -37,7 +42,7 @@ int main(int argc, char **argv) {
         print_usage();
         exit(EXIT_FAILURE);
     }
-
+    DEBUG_PRINTF("C\n");
     //DEBUG_PRINTF("PORT: %d | PRIORITY: %s\n", port, priority);
 
     //DEBUG_PRINTF("Server create socket\n");
@@ -53,6 +58,8 @@ int main(int argc, char **argv) {
     socket_listen(socket);
 
     set_priority(priority);
+
+    set_ratio(ratio);
 
     read_output();
 

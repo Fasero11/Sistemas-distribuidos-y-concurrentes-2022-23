@@ -96,4 +96,6 @@ int get_free_fd();
 
 void set_value_fd (int id, int value);
 
+void set_ratio(int value);
+
 #endif // PROXY_H

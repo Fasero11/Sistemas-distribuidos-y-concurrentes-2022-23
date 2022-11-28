@@ -15,6 +15,12 @@ int current_readers = 0;
 int current_writers = 0;
 int current_threads = 0;
 int priority;
+int ratio;
+int ratio_counter;
+
+void set_ratio(int value){
+    ratio = value;
+};
 
 void set_priority(char *prio){
     if (strcmp(prio, "reader") == 0){
@@ -186,7 +192,11 @@ struct response do_request(struct request request){
         pthread_cond_wait(&has_priority, &mutex);
     }
     locked = 1;
-   
+    
+    if (request.action == priority){
+        ratio_counter++;
+    }
+
     //DEBUG_PRINTF("LOCK\n");
     if (clock_gettime(CLOCK_MONOTONIC, &wait_time_end) != 0){
         warnx("clock_gettime() failed. %s\n",strerror(errno));
@@ -227,11 +237,15 @@ struct response do_request(struct request request){
 
     pthread_mutex_unlock(&counter_mutex);
     
+    DEBUG_PRINTF("RATIO_COUNTER: %d\n",ratio_counter);
+
     if (locked){
         //DEBUG_PRINTF("UNLOCK\n");
         if ((priority == READ && current_readers == 0) || 
-        (priority == WRITE && current_writers == 0)){
+        (priority == WRITE && current_writers == 0) ||
+        (ratio_counter == ratio)){
             DEBUG_PRINTF("SIGNAL\n");
+            ratio_counter = 0;
             pthread_cond_signal(&has_priority);
         }
         pthread_mutex_unlock(&mutex);
