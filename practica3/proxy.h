@@ -80,10 +80,6 @@ struct response do_request(struct request request);
 
 void *talk_2_server(void *ptr);
 
-void close_client_socket(int client_socket_);
-
-void close_client(int socket_);
-
 void write_output();
 
 void read_output();
@@ -92,8 +88,12 @@ void *talk_2_client(void *ptr);
 
 void set_priority(char *priority);
 
-void set_current_threads();
+void set_current_threads(int value);
 
 int get_current_threads();
+
+int get_free_fd();
+
+void set_value_fd (int id, int value);
 
 #endif // PROXY_H

@@ -53,8 +53,6 @@ int main(int argc, char **argv) {
 
     set_name("Client");
 
-
-
     //DEBUG_PRINTF("Client set IP and Port\n");
     set_ip_port(ip,port);
 

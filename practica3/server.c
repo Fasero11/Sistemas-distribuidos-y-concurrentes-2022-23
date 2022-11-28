@@ -7,12 +7,10 @@ void print_usage() {
 }
 
 int main(int argc, char **argv) {
-    int current_threads = 0;
     int opt = 0;
     int port;
     char *priority;
     char *ip = "0.0.0.0";
-    int client_sockets[MAX_THREADS];
 
     static struct option long_options[] = {
         {"port",    required_argument,  NULL,  'p' },
@@ -20,7 +18,7 @@ int main(int argc, char **argv) {
         {0,         0,                  0,     0   }
     };
 
-    int long_index =0;
+    int long_index = 0;
     while ((opt = getopt_long_only(argc, argv, "", long_options, &long_index )) != -1) {
         switch (opt) {
             case 'p':
@@ -58,21 +56,22 @@ int main(int argc, char **argv) {
 
     read_output();
 
-    int i = 0;
-    while (get_current_threads() < MAX_THREADS){
-        DEBUG_PRINTF("CURRENT THREADS: %d\n", get_current_threads());
+    while (1){
         pthread_t new_thread;
 
-        //DEBUG_PRINTF("Server accepting. Current Threads: %d\n",current_threads);
-        client_sockets[i] = socket_accept(socket);
+        int client_socket_ = socket_accept(socket);
+        int id = get_free_fd();
+        set_value_fd (id, client_socket_);
 
-        DEBUG_PRINTF("New Thread. Client Socket: %d\n",client_sockets[i]);       
-        if (pthread_create(&new_thread, NULL, talk_2_client, (void *) &client_sockets[i]) < 0){
+        int *values = malloc(50);
+        values[0] = id;
+        values[1] = client_socket_;
+
+        if (pthread_create(&new_thread, NULL, talk_2_client, (void *)values) < 0){
             warnx("Error while creating Thread\n");
             exit(EXIT_FAILURE);
         }
-
-        i++;
-        set_current_threads();
+        
+        set_current_threads(1);
     }
 };

@@ -4,8 +4,11 @@
 pthread_mutex_t mutex;
 pthread_mutex_t counter_mutex;
 pthread_mutex_t current_threads_mutex;
+pthread_mutex_t free_fd_mutex;
+pthread_cond_t not_full;
 struct sockaddr_in addr, client_addr_;
 char proc_name[6];
+int client_sockets[MAX_THREADS]; // Initialized to zero
 int counter = 0;
 int current_readers = 0;
 int current_writers = 0;
@@ -20,19 +23,52 @@ void set_priority(char *prio){
         priority = WRITE;
         DEBUG_PRINTF("PRIORITY SET TO WRITE\n");
     }
-
-
 }
 
-void set_current_threads (){
+void set_current_threads (int value){
     pthread_mutex_lock(&current_threads_mutex);
-    current_threads++;
+    current_threads = current_threads + value;
+
+    if (value < 0){
+        pthread_cond_signal(&not_full);
+    }
     pthread_mutex_unlock(&current_threads_mutex);
 };
 
 int get_current_threads (){
     return current_threads;
 };
+
+int get_free_fd (){
+    // Returns the first free position in the array.
+    // 0 = free; Otherwise = in use;
+    pthread_mutex_lock(&free_fd_mutex);
+    
+    if (current_threads >= MAX_THREADS){
+        //DEBUG_PRINTF("MAX THREADS REACHED: %d\n", get_current_threads());
+        pthread_cond_wait(&not_full, &free_fd_mutex);
+        //DEBUG_PRINTF("MAX THREADS FREE: %d\n", get_current_threads());
+    }
+
+    int id = 0;
+    while (id < MAX_THREADS){
+        //DEBUG_PRINTF("CLIENT_SOCKET %d, value: %d\n",id, client_sockets[id]);
+        if (client_sockets[id] == 0){
+            client_sockets[id] = 1; // Set as in use
+            break;
+        }
+        id++;
+    }
+    pthread_mutex_unlock(&free_fd_mutex);
+    //DEBUG_PRINTF("RETURNING ID: %d\n",id);
+    return id;
+}
+
+void set_value_fd (int id, int value){
+    pthread_mutex_lock(&free_fd_mutex);
+    client_sockets[id] = value;
+    pthread_mutex_unlock(&free_fd_mutex);
+}
 
 void set_name (char name[6]){
     strcpy(proc_name,name);
@@ -148,7 +184,7 @@ struct response do_request(struct request request){
         locked = 1;
     } 
    
-    DEBUG_PRINTF("LOCK\n");
+    //DEBUG_PRINTF("LOCK\n");
     if (clock_gettime(CLOCK_MONOTONIC, &wait_time_end) != 0){
         warnx("clock_gettime() failed. %s\n",strerror(errno));
         exit(1);
@@ -164,7 +200,7 @@ struct response do_request(struct request request){
     }
 
     // Sleep. (Task leaves CPU)
-    DEBUG_PRINTF("Sleeping for %ld ms\n",sleep_time.tv_nsec/1000000);
+    //DEBUG_PRINTF("Sleeping for %ld ms\n",sleep_time.tv_nsec/1000000);
     if (nanosleep(&sleep_time, NULL) < 0){
         warnx("nanosleep() failed. %s\n",strerror(errno));
         pthread_mutex_unlock(&mutex);
@@ -189,7 +225,7 @@ struct response do_request(struct request request){
     pthread_mutex_unlock(&counter_mutex);
 
     if (locked){
-        DEBUG_PRINTF("UNLOCK\n");
+        //DEBUG_PRINTF("UNLOCK\n");
         pthread_mutex_unlock(&mutex);
     }
     // // // // // // // // // // // //
@@ -204,11 +240,6 @@ struct response do_request(struct request request){
     return response;
 }
 
-
-void close_client_socket(int client_socket_){
-    close(client_socket_);
-}
-
 void write_output(){
     FILE *fpt;
     fpt = fopen("server_output.txt",  "w");
@@ -220,15 +251,25 @@ void read_output(){
     char buffer[20];
     FILE *fpt;
     fpt = fopen("server_output.txt",  "r");
-    while (fgets(buffer, sizeof(buffer), fpt) != NULL) {}
-    fclose(fpt);
-    counter = atoi(buffer);
+    if (fpt != NULL){
+        while (fgets(buffer, sizeof(buffer), fpt) != NULL) {}
+        fclose(fpt);
+        counter = atoi(buffer);
+    } else {
+        fpt = fopen("server_output.txt",  "a");
+        fclose(fpt);
+        counter = 0;
+    }
+
 }
 
 void *talk_2_client(void *ptr){
-    int client_socket_ = *(int*)ptr;
+    int *values = (int*)ptr;
 
-    DEBUG_PRINTF("Thread receiving. Client_socket: %d\n", client_socket_);
+    int id = values[0];
+    int client_socket_ = values[1];
+
+    DEBUG_PRINTF("Thread receiving. Client_socket: %d, ID: %d\n", client_socket_, id);
     struct request request = receive_request(client_socket_);
 
     pthread_mutex_lock(&counter_mutex);
@@ -241,16 +282,19 @@ void *talk_2_client(void *ptr){
 
     pthread_mutex_unlock(&counter_mutex);
 
-    DEBUG_PRINTF("Thread doing request Client_socket: %d\n", client_socket_);
+    //DEBUG_PRINTF("Thread doing request Client_socket: %d\n", client_socket_);
     struct response response = do_request(request);
 
-    DEBUG_PRINTF("Thread Sending response Client_socket: %d\n", client_socket_);
+    //DEBUG_PRINTF("Thread Sending response Client_socket: %d\n", client_socket_);
     send_response(response, client_socket_);
 
-    pthread_mutex_lock(&current_threads_mutex);
-        current_threads--;
-    pthread_mutex_unlock(&current_threads_mutex);
+    close(client_sockets[id]);
+    set_value_fd (id, 0);
+    set_current_threads(-1);
 
+    DEBUG_PRINTF("ID %d NOW FREE. | CURRENT_THREADS: %d\n", id, get_current_threads());
+
+    free(values);
     pthread_exit(NULL);
 }
 // // // // // // // // // // // // // // // //
@@ -286,6 +330,7 @@ void *talk_2_server(void *ptr){
         exit(1);
     }
 
+    DEBUG_PRINTF("Thread %d waiting response\n", thread_id);
     response = receive_response(socket_);
 
     if (response.action == READ){
@@ -296,6 +341,8 @@ void *talk_2_server(void *ptr){
     
     printf("[Cliente #%d] %s, contador=%d, tiempo=%ld ns\n",
      thread_id, response_mode, response.counter, response.waiting_time);
+
+    close(socket_);
 
     pthread_exit(NULL);
 };
@@ -311,9 +358,5 @@ struct response receive_response(int socket_){
     }  
 
     return recv_msg;
-}
-
-void close_client(int socket_){
-    close(socket_);
 }
 // // // // // // // // // // // // // // // //
