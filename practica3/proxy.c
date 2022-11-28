@@ -6,6 +6,7 @@ pthread_mutex_t counter_mutex;
 pthread_mutex_t current_threads_mutex;
 pthread_mutex_t free_fd_mutex;
 pthread_cond_t not_full;
+pthread_cond_t has_priority;
 struct sockaddr_in addr, client_addr_;
 char proc_name[6];
 int client_sockets[MAX_THREADS]; // Initialized to zero
@@ -179,10 +180,12 @@ struct response do_request(struct request request){
         exit(1);
     }
     // // // // REGIÓN CRÍTICA // // // //
-    if (current_writers > 0){
-        pthread_mutex_lock(&mutex);
-        locked = 1;
-    } 
+    pthread_mutex_lock(&mutex);
+    if ( (priority != request.action && request.action == READ && current_writers > 0)
+        || (priority != request.action && request.action == WRITE && current_readers > 0 )){
+        pthread_cond_wait(&has_priority, &mutex);
+    }
+    locked = 1;
    
     //DEBUG_PRINTF("LOCK\n");
     if (clock_gettime(CLOCK_MONOTONIC, &wait_time_end) != 0){
@@ -223,9 +226,14 @@ struct response do_request(struct request request){
     }
 
     pthread_mutex_unlock(&counter_mutex);
-
+    
     if (locked){
         //DEBUG_PRINTF("UNLOCK\n");
+        if ((priority == READ && current_readers == 0) || 
+        (priority == WRITE && current_writers == 0)){
+            DEBUG_PRINTF("SIGNAL\n");
+            pthread_cond_signal(&has_priority);
+        }
         pthread_mutex_unlock(&mutex);
     }
     // // // // // // // // // // // //
