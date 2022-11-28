@@ -5,6 +5,7 @@ pthread_mutex_t mutex;
 pthread_mutex_t counter_mutex;
 pthread_mutex_t current_threads_mutex;
 pthread_mutex_t free_fd_mutex;
+pthread_mutex_t ratio_mutex;
 pthread_cond_t not_full;
 pthread_cond_t has_priority;
 struct sockaddr_in addr, client_addr_;
@@ -186,15 +187,21 @@ struct response do_request(struct request request){
         exit(1);
     }
     // // // // REGIÓN CRÍTICA // // // //
-    pthread_mutex_lock(&mutex);
+    if ((current_writers > 0 && priority == WRITE && request.action == READ) || (request.action == WRITE)){
+        pthread_mutex_lock(&mutex);
+        locked = 1;
+    }
+
     if ( (priority != request.action && request.action == READ && current_writers > 0)
         || (priority != request.action && request.action == WRITE && current_readers > 0 )){
         pthread_cond_wait(&has_priority, &mutex);
+        locked = 1;
     }
-    locked = 1;
-    
+
     if (request.action == priority){
+        pthread_mutex_lock(&ratio_mutex);
         ratio_counter++;
+        pthread_mutex_unlock(&ratio_mutex);
     }
 
     //DEBUG_PRINTF("LOCK\n");
@@ -225,8 +232,6 @@ struct response do_request(struct request request){
 
     write_output();
 
-
-
     pthread_mutex_lock(&counter_mutex);
     
     if (request.action == READ){
@@ -239,24 +244,28 @@ struct response do_request(struct request request){
     
     DEBUG_PRINTF("RATIO_COUNTER: %d\n",ratio_counter);
 
+    //DEBUG_PRINTF("UNLOCK\n");
+    pthread_mutex_lock(&ratio_mutex);
+    if ((priority == READ && current_readers == 0) || 
+    (priority == WRITE && current_writers == 0) ||
+    (ratio_counter >= ratio)){
+        DEBUG_PRINTF("SIGNAL\n");
+        ratio_counter = 0;
+        pthread_cond_signal(&has_priority);
+    }
+    pthread_mutex_unlock(&ratio_mutex);
+
     if (locked){
-        //DEBUG_PRINTF("UNLOCK\n");
-        if ((priority == READ && current_readers == 0) || 
-        (priority == WRITE && current_writers == 0) ||
-        (ratio_counter == ratio)){
-            DEBUG_PRINTF("SIGNAL\n");
-            ratio_counter = 0;
-            pthread_cond_signal(&has_priority);
-        }
         pthread_mutex_unlock(&mutex);
     }
     // // // // // // // // // // // //
 
     response.action = request.action;
     response.counter = counter;
-    int waited_sec = wait_time_end.tv_sec - wait_time_start.tv_sec;
+    long waited_sec = wait_time_end.tv_sec - wait_time_start.tv_sec;
     long waited_nsec = wait_time_end.tv_nsec - wait_time_start.tv_nsec;
     long waited_total_ns =  waited_nsec + waited_sec*1000000000;
+    DEBUG_PRINTF("SECS: %ld, NSEC: %ld\n",waited_sec, waited_nsec);
     response.waiting_time = waited_total_ns;
 
     return response;
