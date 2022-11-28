@@ -7,7 +7,8 @@ pthread_mutex_t current_threads_mutex;
 pthread_mutex_t free_fd_mutex;
 pthread_mutex_t ratio_mutex;
 pthread_cond_t not_full;
-pthread_cond_t has_priority;
+pthread_cond_t allow_readers;
+pthread_cond_t allow_writers;
 struct sockaddr_in addr, client_addr_;
 char proc_name[6];
 int client_sockets[MAX_THREADS]; // Initialized to zero
@@ -186,25 +187,30 @@ struct response do_request(struct request request){
         warnx("clock_gettime() failed. %s\n",strerror(errno));
         exit(1);
     }
-    // // // // REGIÓN CRÍTICA // // // //
+
     if ((current_writers > 0 && priority == WRITE && request.action == READ) || (request.action == WRITE)){
         pthread_mutex_lock(&mutex);
         locked = 1;
     }
 
-    if ( (priority != request.action && request.action == READ && current_writers > 0)
-        || (priority != request.action && request.action == WRITE && current_readers > 0 )){
-        pthread_cond_wait(&has_priority, &mutex);
+    if ((priority != request.action && request.action == WRITE && current_readers > 0 )){
+        pthread_cond_wait(&allow_writers, &mutex);
+        locked = 1;
+
+    } else if ( (priority != request.action && request.action == READ && current_writers > 0)){
+        pthread_cond_wait(&allow_readers, &mutex);
         locked = 1;
     }
 
+    // // // // REGIÓN CRÍTICA // // // //
     if (request.action == priority){
         pthread_mutex_lock(&ratio_mutex);
-        ratio_counter++;
+        ratio_counter++;   // Increase by 1 if a prio client has entered.
         pthread_mutex_unlock(&ratio_mutex);
+    } else {
+        ratio_counter = 0; // Reset counter if a non prio client has entered.
     }
 
-    //DEBUG_PRINTF("LOCK\n");
     if (clock_gettime(CLOCK_MONOTONIC, &wait_time_end) != 0){
         warnx("clock_gettime() failed. %s\n",strerror(errno));
         exit(1);
@@ -244,16 +250,27 @@ struct response do_request(struct request request){
     
     DEBUG_PRINTF("RATIO_COUNTER: %d\n",ratio_counter);
 
-    //DEBUG_PRINTF("UNLOCK\n");
-    pthread_mutex_lock(&ratio_mutex);
-    if ((priority == READ && current_readers == 0) || 
-    (priority == WRITE && current_writers == 0) ||
-    (ratio_counter >= ratio)){
-        DEBUG_PRINTF("SIGNAL\n");
-        ratio_counter = 0;
-        pthread_cond_signal(&has_priority);
+    if (priority == READ && current_readers == 0){
+        DEBUG_PRINTF("SIGNAL ALLOW_WRITERS\n");
+        pthread_cond_signal(&allow_writers);
     }
-    pthread_mutex_unlock(&ratio_mutex);
+
+    if (priority == WRITE && current_writers == 0){
+        DEBUG_PRINTF("SIGNAL ALLOW_READERS\n");
+        pthread_cond_signal(&allow_readers);
+    }
+
+    if (ratio_counter >= ratio) {
+        pthread_mutex_lock(&ratio_mutex);
+        DEBUG_PRINTF("SIGNAL RATIO\n");
+        ratio_counter = 0;
+        if (priority == READ){
+            pthread_cond_signal(&allow_writers);
+        } else if (priority == WRITE){
+            pthread_cond_signal(&allow_readers);
+        };
+        pthread_mutex_unlock(&ratio_mutex);
+    }
 
     if (locked){
         pthread_mutex_unlock(&mutex);
