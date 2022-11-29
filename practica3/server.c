@@ -2,6 +2,23 @@
 
 #include "proxy.h"
 
+void read_output(){
+    int counter_;
+    char buffer[20];
+    FILE *fpt;
+    fpt = fopen("server_output.txt",  "r");
+    if (fpt != NULL){
+        while (fgets(buffer, sizeof(buffer), fpt) != NULL) {}
+        fclose(fpt);
+        counter_ = atoi(buffer);
+    } else {
+        fpt = fopen("server_output.txt",  "a");
+        fclose(fpt);
+        counter_ = 0;
+    }
+    set_counter(counter_);
+}
+
 void print_usage() {
     printf("Usage: client --ip IP --port PORT --mode writer/reader --threads N --ratio M\n");
 }
@@ -43,20 +60,16 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
     
-    int fd = init_server(ip, port, priority, ratio);
+    init_server(ip, port, priority, ratio);
+    read_output();
 
     while (1){
         pthread_t new_thread;
+        int *thread_info = malloc(50);
+    
+        init_server_thread(thread_info);
 
-        int client_socket_ = socket_accept(fd);
-        int id = get_free_fd();
-        set_value_fd (id, client_socket_);
-
-        int *values = malloc(50);
-        values[0] = id;
-        values[1] = client_socket_;
-
-        if (pthread_create(&new_thread, NULL, talk_2_client, (void *)values) < 0){
+        if (pthread_create(&new_thread, NULL, talk_2_client, (void *)thread_info) < 0){
             warnx("Error while creating Thread\n");
             exit(EXIT_FAILURE);
         }

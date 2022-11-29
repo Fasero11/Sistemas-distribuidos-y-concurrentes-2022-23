@@ -6,9 +6,11 @@ pthread_mutex_t counter_mutex;
 pthread_mutex_t current_threads_mutex;
 pthread_mutex_t free_fd_mutex;
 pthread_mutex_t ratio_mutex;
+pthread_mutex_t writers_mutex;
+pthread_mutex_t readers_mutex;
 pthread_cond_t not_full;
-pthread_cond_t allow_readers;
 pthread_cond_t allow_writers;
+pthread_cond_t allow_readers;
 struct sockaddr_in addr, client_addr_;
 char proc_name[6];
 int client_sockets[MAX_THREADS]; // Initialized to zero
@@ -19,33 +21,44 @@ int current_threads = 0;
 int priority;
 int ratio;
 int ratio_counter;
+int server_socket;
 
-int init_server(char* ip, int port, char* priority_, int ratio_){
-    int fd = 0;
+void init_server(char* ip, int port, char* priority_, int ratio_){
 
     //DEBUG_PRINTF("Server create socket\n");
-    fd = socket_create();
+    server_socket = socket_create();
 
     //DEBUG_PRINTF("Server set IP and Port\n");
     set_ip_port(ip,port);
 
     //DEBUG_PRINTF("Server binding\n");
-    socket_bind(fd);
+    socket_bind(server_socket);
 
     //DEBUG_PRINTF("Server listening\n");
-    socket_listen(fd);
+    socket_listen(server_socket);
 
     set_priority(priority_);
 
     set_ratio(ratio_);
-
-    read_output();
-
-    return fd;
 }
 
-void set_ratio(int value){
-    ratio = value;
+void init_server_thread(int *thread_info){
+
+    int client_socket_ = socket_accept(server_socket);
+    int id = get_free_fd();
+    set_value_fd (id, client_socket_);
+
+
+    thread_info[0] = id;
+    thread_info[1] = client_socket_;
+}
+
+void set_ratio(int ratio_){
+    ratio = ratio_;
+};
+
+void set_counter(int counter_){
+    counter = counter_;
 };
 
 void set_priority(char *prio){
@@ -172,8 +185,6 @@ int socket_accept(int socket_){
     return client_socket_;
 };
 
-// // // // // // SERVER ONLY // // // // // //
-
 struct request receive_request(int client_socket_){
     struct request recv_msg;
 
@@ -187,9 +198,9 @@ struct request receive_request(int client_socket_){
     return recv_msg;
 }
 
-void send_response(struct response response, int client_socket_){
+void send_response(struct response response, int socket){
 
-    if (send(client_socket_, (void *)&response, sizeof(response), 0) < 0){
+    if (send(socket, (void *)&response, sizeof(response), 0) < 0){
         warnx("send() failed. %s\n", strerror(errno));
         exit(1);
     }
@@ -206,33 +217,54 @@ struct response do_request(struct request request){
     sleep_time.tv_sec = 0;
     sleep_time.tv_nsec = rand() % 75000000 + 75000000; // Random number between 75000000 and 150000000.
 
-
     if (clock_gettime(CLOCK_MONOTONIC, &wait_time_start) != 0){
         warnx("clock_gettime() failed. %s\n",strerror(errno));
         exit(1);
     }
 
-    if ((current_writers > 0 && priority == WRITE && request.action == READ) || (request.action == WRITE)){
+    pthread_mutex_lock(&counter_mutex);
+    if (request.action == READ){
+        current_readers++;
+    } else {
+        current_writers++;
+    }
+
+    if (request.action == READ && (current_writers > 1 || current_readers > 1) && ratio != 0){
+        DEBUG_PRINTF("READER WAITING\n");
+        pthread_mutex_lock(&readers_mutex);
+        pthread_mutex_unlock(&counter_mutex);
+        DEBUG_PRINTF("READER CONDITION WAITING\n");
+        pthread_cond_wait(&allow_readers, &readers_mutex);
+        pthread_mutex_unlock(&readers_mutex);    
+    }
+
+    else if (request.action == WRITE && (current_writers > 1 || current_readers > 1) && ratio != 0){
+        DEBUG_PRINTF("WRITER WAITING\n");
+        pthread_mutex_lock(&writers_mutex);
+        pthread_mutex_unlock(&counter_mutex);
+        DEBUG_PRINTF("WRITER CONDITION WAITING\n");
+        pthread_cond_wait(&allow_writers, &writers_mutex);
+        pthread_mutex_unlock(&writers_mutex);      
+          
+    } else {
+        pthread_mutex_unlock(&counter_mutex);
+    }
+
+    // Take mutex if you are a reader without priority and there are writers or if you are a writer.
+    if ((current_writers > 0 && request.action == READ) || (request.action == WRITE)){
+        DEBUG_PRINTF("LOCK: %d | current_writers: %d | current_readers: %d\n", request.action,current_writers,current_writers);
         pthread_mutex_lock(&mutex);
         locked = 1;
     }
 
-    if ((priority != request.action && request.action == WRITE && current_readers > 0 )){
-        pthread_cond_wait(&allow_writers, &mutex);
-        locked = 1;
-
-    } else if ( (priority != request.action && request.action == READ && current_writers > 0)){
-        pthread_cond_wait(&allow_readers, &mutex);
-        locked = 1;
-    }
-
     // // // // REGIÓN CRÍTICA // // // //
+
     if (request.action == priority){
         pthread_mutex_lock(&ratio_mutex);
         ratio_counter++;   // Increase by 1 if a prio client has entered.
         pthread_mutex_unlock(&ratio_mutex);
     } else {
-        ratio_counter = 0; // Reset counter if a non prio client has entered.
+        ratio_counter = 0;
     }
 
     if (clock_gettime(CLOCK_MONOTONIC, &wait_time_end) != 0){
@@ -270,32 +302,47 @@ struct response do_request(struct request request){
         current_writers--;
     }
 
-    pthread_mutex_unlock(&counter_mutex);
-    
-    DEBUG_PRINTF("RATIO_COUNTER: %d\n",ratio_counter);
+    DEBUG_PRINTF("R: %d | RATIO_COUNTER: %d\n",ratio, ratio_counter);
 
-    if (priority == READ && current_readers == 0){
-        DEBUG_PRINTF("SIGNAL ALLOW_WRITERS\n");
+    if (ratio_counter >= ratio && ratio != 0 && request.action == READ && current_writers > 0) {
+        ratio_counter = 0;
+        DEBUG_PRINTF("RATIO ALLOW WRITERS\n");
+        pthread_mutex_lock(&ratio_mutex);
         pthread_cond_signal(&allow_writers);
-    }
+        pthread_mutex_unlock(&ratio_mutex);
+    } else if (ratio_counter >= ratio && ratio != 0 && request.action == WRITE && current_readers > 0){
+        ratio_counter = 0;
+        DEBUG_PRINTF("RATIO ALLOW WRITERS\n");
+        pthread_mutex_lock(&ratio_mutex);
+        pthread_cond_signal(&allow_readers);
+        pthread_mutex_unlock(&ratio_mutex);
 
-    if (priority == WRITE && current_writers == 0){
-        DEBUG_PRINTF("SIGNAL ALLOW_READERS\n");
+    } else if (priority == READ && current_readers > 0){
+        DEBUG_PRINTF("NEXT_READER PRIORITY ALLOWED\n");
+        pthread_cond_signal(&allow_readers);
+    } else if (priority == WRITE && current_writers > 0){
+        DEBUG_PRINTF("NEXT_WRITER PRIORITY ALLOWED\n");
+        pthread_cond_signal(&allow_writers);
+    } else if (request.action == READ && current_readers > 0){
+        DEBUG_PRINTF("NEXT_READER 1\n");
+        pthread_cond_signal(&allow_readers);
+    } else if (request.action == WRITE && current_writers > 0){
+        DEBUG_PRINTF("NEXT_WRITER 1\n");
+        pthread_cond_signal(&allow_writers);
+    } else if (request.action == READ && current_readers == 0){
+        DEBUG_PRINTF("NEXT_WRITER 2\n");
+        pthread_cond_signal(&allow_writers);
+    } else if (request.action == WRITE && current_writers == 0){
+        DEBUG_PRINTF("NEXT_READER 2\n");
+        pthread_cond_signal(&allow_readers);
+    } else {
+        DEBUG_PRINTF("DEFAULT\n");
         pthread_cond_signal(&allow_readers);
     }
 
-    if (ratio_counter >= ratio) {
-        pthread_mutex_lock(&ratio_mutex);
-        DEBUG_PRINTF("SIGNAL RATIO\n");
-        ratio_counter = 0;
-        if (priority == READ){
-            pthread_cond_signal(&allow_writers);
-        } else if (priority == WRITE){
-            pthread_cond_signal(&allow_readers);
-        };
-        pthread_mutex_unlock(&ratio_mutex);
-    }
+    pthread_mutex_unlock(&counter_mutex);
 
+    DEBUG_PRINTF("UNLOCK\n");
     if (locked){
         pthread_mutex_unlock(&mutex);
     }
@@ -306,7 +353,7 @@ struct response do_request(struct request request){
     long waited_sec = wait_time_end.tv_sec - wait_time_start.tv_sec;
     long waited_nsec = wait_time_end.tv_nsec - wait_time_start.tv_nsec;
     long waited_total_ns =  waited_nsec + waited_sec*1000000000;
-    DEBUG_PRINTF("SECS: %ld, NSEC: %ld\n",waited_sec, waited_nsec);
+    //DEBUG_PRINTF("SECS: %ld, NSEC: %ld\n",waited_sec, waited_nsec);
     response.waiting_time = waited_total_ns;
 
     return response;
@@ -319,40 +366,14 @@ void write_output(){
     fclose(fpt);
 }
 
-void read_output(){
-    char buffer[20];
-    FILE *fpt;
-    fpt = fopen("server_output.txt",  "r");
-    if (fpt != NULL){
-        while (fgets(buffer, sizeof(buffer), fpt) != NULL) {}
-        fclose(fpt);
-        counter = atoi(buffer);
-    } else {
-        fpt = fopen("server_output.txt",  "a");
-        fclose(fpt);
-        counter = 0;
-    }
-
-}
-
 void *talk_2_client(void *ptr){
     int *values = (int*)ptr;
 
     int id = values[0];
     int client_socket_ = values[1];
 
-    DEBUG_PRINTF("Thread receiving. Client_socket: %d, ID: %d\n", client_socket_, id);
+    //DEBUG_PRINTF("Thread receiving. Client_socket: %d, ID: %d\n", client_socket_, id);
     struct request request = receive_request(client_socket_);
-
-    pthread_mutex_lock(&counter_mutex);
-    
-    if (request.action == READ){
-        current_readers++;
-    } else {
-        current_writers++;
-    }
-
-    pthread_mutex_unlock(&counter_mutex);
 
     //DEBUG_PRINTF("Thread doing request Client_socket: %d\n", client_socket_);
     struct response response = do_request(request);
@@ -364,15 +385,11 @@ void *talk_2_client(void *ptr){
     set_value_fd (id, 0);
     set_current_threads(-1);
 
-    DEBUG_PRINTF("ID %d NOW FREE. | CURRENT_THREADS: %d\n", id, get_current_threads());
+    //DEBUG_PRINTF("ID %d NOW FREE. | CURRENT_THREADS: %d\n", id, get_current_threads());
 
     free(values);
     pthread_exit(NULL);
 }
-// // // // // // // // // // // // // // // //
-
-
-// // // // // // CLIENT ONLY // // // // // //
 
 void *talk_2_server(void *ptr){
 
@@ -380,13 +397,13 @@ void *talk_2_server(void *ptr){
     struct response response;
     struct request request;
     struct client_threads *client_threads_ = ((struct client_threads *)ptr);
-    int socket_ =  client_threads_->socket;
     char *mode = client_threads_->mode;
     int thread_id = client_threads_->thread_id;
     enum operations action;
     action = WRITE;
 
     //DEBUG_PRINTF("Client %d connecting... (%s)\n",thread_id, mode);
+    int socket_ =  socket_create();
     socket_connect(socket_);
 
     if (strcmp(mode, "reader") == 0){
@@ -431,4 +448,3 @@ struct response receive_response(int socket_){
 
     return recv_msg;
 }
-// // // // // // // // // // // // // // // //

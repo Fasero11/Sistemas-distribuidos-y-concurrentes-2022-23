@@ -45,24 +45,19 @@ int main(int argc, char **argv) {
         print_usage();
         exit(EXIT_FAILURE);
     }
-
-    //DEBUG_PRINTF("IP: %s | PORT: %d | MODE: %s | THREADS: %d\n", ip, port, mode, thread_num);
     
     struct client_threads client_threads[thread_num];
     pthread_t all_threads[thread_num];
 
     set_name("Client");
 
-    //DEBUG_PRINTF("Client set IP and Port\n");
     set_ip_port(ip,port);
 
     int i;
     for (i = 0; i < thread_num; i++){
-        //DEBUG_PRINTF("Client create socket\n");
 
         client_threads[i].mode = mode;
         client_threads[i].thread_id = i;
-        client_threads[i].socket = socket_create();
 
         if (pthread_create(&all_threads[i], NULL, talk_2_server, (void *)&client_threads[i]) < 0){
             warnx("Error while creating Thread\n");

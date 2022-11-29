@@ -31,7 +31,6 @@
 struct client_threads{
     char *mode;         // Mode: writer / reader
     int thread_id;      // ID of the thread  
-    int socket;         // Client fd
 };
 
 enum operations {
@@ -50,7 +49,7 @@ unsigned int counter;
 long waiting_time;
 };
 
-int init_server(char* ip, int port, char* priority_, int ratio_);
+/* FUNCIONES COMPARTIDAS */ 
 
 // Establece el nombre del proceso (para los logs y trazas)
 void set_name (char name[6]);
@@ -58,11 +57,69 @@ void set_name (char name[6]);
 // Establecer ip y puerto
 void set_ip_port (char* ip, unsigned int port);
 
+
+/* FUNCIONES DEL CLIENTE */ 
+
+// Se conecta al servidor, intercambia mensajes y desconecta.
+void *talk_2_server(void *ptr);
+
+// Recibe y devuelve un mensaje tipo response
+struct response receive_response(int socket_);
+
+// Establece conexión con el servidor.
+void socket_connect(int socket_);
+
+
+/* FUNCIONES DEL SERVIDOR */ 
+
+// Inicializa el servidor.
+void init_server(char* ip, int port, char* priority_, int ratio_);
+
+// Acepta una conexión y guarda en "client_sockets" el socket del cliente
+// en una posición específica.
+void init_server_thread(int *thread_info);
+
+// Intercambio de mensajes con el cliente y finalización de la conexión.
+void *talk_2_client(void *ptr);
+
+// Sobrescribe el contador actual en el fichero "server_output.txt"
+void write_output();
+
+// Lee el fichero server_output.txt y establece el contador al valor leido.
+// Si no existe el fichero, se crea.
+void read_output();
+
+// Envía el mensaje response a través del socket indicado.
+void send_response(struct response response, int socket);
+
+// Ejecuta la tarea indicada en request.
+// Devuelve un mensaje tipo response.
+struct response do_request(struct request request);
+
+// Establece el ratio entre clientes con y sin prioridad.
+void set_ratio(int ratio_);
+
+// Establece la prioridad del servidor READ/WRITE
+void set_priority(char *priority);
+
+// Establece el valor del contador.
+void set_counter(int counter_);
+
+// Suma al número actual de threads el valor indicado.
+void set_current_threads(int value);
+
+// Devuelve el número actual de threads activos
+int get_current_threads();
+
+// Devuelve la primera posición del array "client_sockets" que no está
+// siendo utilizada por ningún thread.
+int get_free_fd();
+
+// Guarda el value en la posición id de "client_sockets"
+void set_value_fd (int id, int value);
+
 // Crea un socket para TCP
 int socket_create();
-
-// Hace un bucle hasta que consigue establecer conexión.
-void socket_connect(int socket_);
 
 // Hace bind con la IP y puerto establecidos en addr.
 void socket_bind(int socket_);
@@ -70,34 +127,10 @@ void socket_bind(int socket_);
 // Marca el socket creado como pasivo.
 void socket_listen(int socket_);
 
+// Acepta la conexión entrante. (Solo servidor)
 int socket_accept(int socket_);
 
+// Recibe y devuelve un mensaje tipo request
 struct request receive_request(int client_socket_);
-
-struct response receive_response(int socket_);
-
-void send_response(struct response response, int client_socket_);
-
-struct response do_request(struct request request);
-
-void *talk_2_server(void *ptr);
-
-void write_output();
-
-void read_output();
-
-void *talk_2_client(void *ptr);
-
-void set_priority(char *priority);
-
-void set_current_threads(int value);
-
-int get_current_threads();
-
-int get_free_fd();
-
-void set_value_fd (int id, int value);
-
-void set_ratio(int value);
 
 #endif // PROXY_H
