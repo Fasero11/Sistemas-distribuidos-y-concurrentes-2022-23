@@ -40,18 +40,18 @@ int main(int argc, char **argv) {
     
     //.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.
 
-    init_server(ip, port, mode);
+    init_broker(ip, port, mode);
 
-    pthread_t new_thread;
+    // EACH THREAD WILL COMMUNICATE WITH ONE CLIENT (Publisher / Subscriber)
+    while(1){
+        pthread_t new_thread;
 
-    if (pthread_create(&new_thread, NULL, talk_to_client, (void *)NULL) < 0){
-        warnx("Error while creating Thread\n");
-        exit(EXIT_FAILURE);
+        int *thread_info = malloc(16);
+        init_server_thread(thread_info);
+
+        if (pthread_create(&new_thread, NULL, talk_to_client, (void *)thread_info) < 0){
+            warnx("Error while creating Thread\n");
+            exit(EXIT_FAILURE);
+        }
     }
-
-    if (pthread_join(new_thread, NULL) < 0) {
-        warnx("Error while joining Thread\n");
-        exit(1);
-    };
-
 };

@@ -25,25 +25,6 @@
 #include <signal.h>
 #include <getopt.h>
 
-#define MAX_TOPICS 10
-#define MAX_PUBLISHERS 100
-#define MAX_SUBSCRIBERS 900
-
-#define SECUENCIAL 0
-#define PARALELO 1
-#define JUSTO 2
-
-struct publisher {
-    int topic;
-    int fd;
-}
-
-struct subscriber {
-    int topic;
-    int fd;
-    int id;
-}
-
 enum operations {
 REGISTER_PUBLISHER = 0,
 UNREGISTER_PUBLISHER,
@@ -54,12 +35,12 @@ PUBLISH_DATA
 
 struct publish {
     struct timespec time_generated_data;
-    char[100] data;
+    char data[100];
 };
 
 struct message {
     enum operations action;
-    char[100] topic;
+    char topic[100];
     // Solo utilizado en mensajes de UNREGISTER
     int id;
     // Solo utilizado en mensajes PUBLISH_DATA
@@ -77,7 +58,7 @@ struct response {
     int id;
 };
 
-void *talk_to_server(void *ptr);
+void talk_to_server(char* topic);
 
 // Establece el nombre del proceso (para los logs y trazas)
 void set_name (char name[6]);

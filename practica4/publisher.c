@@ -1,9 +1,9 @@
 // Gonzalo Vega Pérez - 2022
 
-#include "proxy_subscriber.h"
+#include "proxy_publisher.h"
 
 void print_usage() {
-    printf("Usage: subscriber --ip [BROKER_IP] --port [BROKER_PORT] --topic [TOPIC]\n");
+    printf("Usage: publisher --ip [BROKER_IP] --port [BROKER_PORT] --topic [TOPIC]\n");
 }
 
 int main(int argc, char **argv) {
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    set_name("Subscriber");
+    set_name("Publisher");
 
     set_ip_port(ip,port);
 

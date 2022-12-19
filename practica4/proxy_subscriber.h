@@ -58,7 +58,7 @@ struct response {
     int id;
 };
 
-void talk_to_server(char* topic);
+void talk_to_server(char* topic, char* ip, int port);
 
 // Establece el nombre del proceso (para los logs y trazas)
 void set_name (char name[6]);

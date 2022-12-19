@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 
     set_ip_port(ip,port);
 
-    talk_to_server(topic);
+    talk_to_server(topic, ip, port);
 
     exit(EXIT_SUCCESS);
 }

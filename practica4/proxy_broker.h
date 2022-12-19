@@ -33,13 +33,20 @@
 #define PARALELO 1
 #define JUSTO 2
 
+struct topic {
+    char name[100];
+    char data[1024];
+    int num_subscribers;
+    int num_publishers;
+};
+
 struct publisher {
-    int topic;
+    char topic[100];
     int fd;
 };
 
 struct subscriber {
-    int topic;
+    char topic[100];
     int fd;
     int id;
 };
@@ -77,6 +84,8 @@ struct response {
     int id;
 };
 
+void init_server_thread(int *thread_info);
+
 void *talk_to_client(void *ptr);
 
 // Establece el nombre del proceso (para los logs y trazas)
@@ -92,7 +101,7 @@ struct response receive_response(int socket_);
 void socket_connect(int socket_);
 
 // Inicializa el servidor.
-void init_server(char* ip, int port, char* mode);
+void init_broker(char* ip, int port, char* mode);
 
 // Crea un socket para TCP
 int socket_create();

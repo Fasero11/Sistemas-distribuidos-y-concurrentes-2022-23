@@ -38,7 +38,14 @@ void socket_connect(int socket_){
     DEBUG_PRINTF ("%s: Connected to server...\n",proc_name );
 };
 
-void talk_to_server(char *topic){
+void talk_to_server(char *topic, char *ip, int port){
+
+    struct timespec time;
+    long time_seconds;
+    long time_nanoseconds;
+
+    struct response response;
+
     struct message message;
     message.action = REGISTER_SUBSCRIBER;
     strcpy(message.topic, topic);
@@ -47,11 +54,34 @@ void talk_to_server(char *topic){
 
     socket_connect(client_socket);
 
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    time_seconds = time.tv_sec;
+    time_nanoseconds = time.tv_nsec;
+    printf("[%ld.%ld] Subscriber conectado con broker (%s:%d)\n",
+    time_seconds, time_nanoseconds, ip, port);
+
     DEBUG_PRINTF("action: %d, topic: %s\n",message.action, message.topic);  
     if (send(client_socket, (void *)&message, sizeof(message), 0) < 0){
         warnx("send() failed. %s\n", strerror(errno));
         exit(1);
     }
+
+    if (recv(client_socket, (void *)&response, sizeof(response), 0) < 0){
+        warnx("recv() failed. %s\n", strerror(errno));
+        exit(1);
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    time_seconds = time.tv_sec;
+    time_nanoseconds = time.tv_nsec;
+    if (response.response_status == OK){
+        printf("[%ld.%ld] Registrado correctamente con ID: %d para topic %s\n",
+        time_seconds, time_nanoseconds, response.id, topic);    
+    } else {
+        printf("[%ld.%ld] Error al hacer el registro: error=%d",
+        time_seconds, time_nanoseconds, response.response_status);       
+    }
+
     DEBUG_PRINTF("Message sent\n"); 
 
 }
