@@ -42,6 +42,7 @@ struct topic {
 
 struct publisher {
     char topic[100];
+    int id;
     int fd;
 };
 
@@ -83,6 +84,8 @@ struct response {
     enum status response_status;
     int id;
 };
+
+int create_topic(char *name);
 
 void init_server_thread(int *thread_info);
 

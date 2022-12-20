@@ -78,7 +78,7 @@ void talk_to_server(char *topic, char *ip, int port){
         printf("[%ld.%ld] Registrado correctamente con ID: %d para topic %s\n",
         time_seconds, time_nanoseconds, response.id, topic);    
     } else {
-        printf("[%ld.%ld] Error al hacer el registro: error=%d",
+        printf("[%ld.%ld] Error al hacer el registro: error=%d\n",
         time_seconds, time_nanoseconds, response.response_status);       
     }
 
