@@ -85,6 +85,8 @@ struct response {
     int id;
 };
 
+void sighandler(int signum);
+
 int create_topic(char *name);
 
 void init_server_thread(int *thread_info);

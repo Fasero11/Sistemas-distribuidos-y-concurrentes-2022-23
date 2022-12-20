@@ -7,6 +7,8 @@ void print_usage() {
 }
 
 int main(int argc, char **argv) {
+    signal(SIGINT, sighandler);
+
     int opt = 0;
     int port;
     char *mode;

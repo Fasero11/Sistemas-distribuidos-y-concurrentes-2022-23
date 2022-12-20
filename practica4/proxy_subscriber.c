@@ -5,6 +5,22 @@ struct sockaddr_in addr;
 char proc_name[32];
 int client_socket;
 int mode;
+char client_topic[100];
+
+void sighandler(int signum){
+    DEBUG_PRINTF("SIGNAL RECEIVED...  bye.\n");
+    struct message message;
+    message.action = UNREGISTER_SUBSCRIBER;
+    strcpy(message.topic, client_topic);
+
+    if (send(client_socket, (void *)&message, sizeof(message), 0) < 0){
+        warnx("send() failed. %s\n", strerror(errno));
+        exit(1);
+    }
+
+    close(client_socket);
+    exit(1);
+}
 
 void set_name (char name[6]){
     strcpy(proc_name,name);
@@ -39,6 +55,7 @@ void socket_connect(int socket_){
 };
 
 void talk_to_server(char *topic, char *ip, int port){
+    strcpy(client_topic, topic);
 
     struct timespec time;
     long time_seconds;
@@ -82,6 +99,10 @@ void talk_to_server(char *topic, char *ip, int port){
         time_seconds, time_nanoseconds, response.response_status);       
     }
 
-    DEBUG_PRINTF("Message sent\n"); 
+    DEBUG_PRINTF("Message sent\n");
+
+    while(1){
+        DEBUG_PRINTF("IM DONE\n");
+    } 
 
 }

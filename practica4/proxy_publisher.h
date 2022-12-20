@@ -58,6 +58,8 @@ struct response {
     int id;
 };
 
+void sighandler(int signum);
+
 void talk_to_server(char* topic);
 
 // Establece el nombre del proceso (para los logs y trazas)

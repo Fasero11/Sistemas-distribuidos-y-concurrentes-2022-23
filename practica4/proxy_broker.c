@@ -11,6 +11,13 @@ struct subscriber all_subscribers[MAX_SUBSCRIBERS];
 struct publisher all_publishers[MAX_PUBLISHERS];
 struct topic all_topics[MAX_TOPICS];
 
+
+void sighandler(int signum){
+    DEBUG_PRINTF("SIGNAL RECEIVED...  bye.\n");
+    close(server_socket);
+    exit(1);
+}
+
 void init_broker(char* ip, int port, char* mode_){
 
     //DEBUG_PRINTF("Server create socket\n");
