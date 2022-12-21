@@ -6,9 +6,39 @@ char proc_name[32];
 int client_socket;
 int mode;
 char client_topic[100];
+int client_id;
+
+void start_data_transfer(){
+    struct publish publish;
+    struct timespec time;
+    long received_seconds, received_nanoseconds, generated_seconds, generated_nanoseconds;
+
+    // Wait for data from the broker
+    if (recv(client_socket, (void *)&publish, sizeof(publish), 0) < 0){
+        warnx("recv() failed. %s\n", strerror(errno));
+        exit(1);
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    received_seconds = time.tv_sec;
+    received_nanoseconds = time.tv_nsec;
+    generated_seconds = publish.time_generated_data.tv_sec;
+    generated_nanoseconds = publish.time_generated_data.tv_nsec;
+
+    printf("[%ld.%ld] Recibido mensaje topic: %s - mensaje: %s - Generó: %ld.%ld"
+    "- Recibido: %ld.%ld - Latencia: %ld.%ld\n",
+    received_seconds, received_nanoseconds, client_topic, publish.data, 
+    generated_seconds, generated_nanoseconds, received_seconds,
+    received_nanoseconds, received_seconds-generated_seconds,
+    received_nanoseconds-generated_nanoseconds); 
+
+}
 
 void sighandler(int signum){
     DEBUG_PRINTF("SIGNAL RECEIVED...  bye.\n");
+    struct timespec time;
+    long seconds, nanoseconds;
+
     struct message message;
     message.action = UNREGISTER_SUBSCRIBER;
     strcpy(message.topic, client_topic);
@@ -17,6 +47,13 @@ void sighandler(int signum){
         warnx("send() failed. %s\n", strerror(errno));
         exit(1);
     }
+
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    seconds = time.tv_sec;
+    nanoseconds = time.tv_nsec;
+
+    printf("[%ld.%ld] De-Registrado (%d) correctamente del broker.\n",
+    seconds, nanoseconds, client_id); 
 
     close(client_socket);
     exit(1);
@@ -88,6 +125,8 @@ void talk_to_server(char *topic, char *ip, int port){
         exit(1);
     }
 
+    client_id = response.id; 
+
     clock_gettime(CLOCK_MONOTONIC, &time);
     time_seconds = time.tv_sec;
     time_nanoseconds = time.tv_nsec;
@@ -101,8 +140,5 @@ void talk_to_server(char *topic, char *ip, int port){
 
     DEBUG_PRINTF("Message sent\n");
 
-    while(1){
-        DEBUG_PRINTF("IM DONE\n");
-    } 
-
+    start_data_transfer();
 }

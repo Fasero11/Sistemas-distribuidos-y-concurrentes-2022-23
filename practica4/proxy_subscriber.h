@@ -58,6 +58,8 @@ struct response {
     int id;
 };
 
+void start_data_transfer();
+
 void sighandler(int signum);
 
 void talk_to_server(char* topic, char* ip, int port);

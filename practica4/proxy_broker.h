@@ -33,13 +33,6 @@
 #define PARALELO 1
 #define JUSTO 2
 
-struct topic {
-    char name[100];
-    char data[1024];
-    int num_subscribers;
-    int num_publishers;
-};
-
 struct publisher {
     char topic[100];
     int id;
@@ -50,6 +43,15 @@ struct subscriber {
     char topic[100];
     int fd;
     int id;
+};
+
+struct topic {
+    char name[100];
+    char data[1024];
+    int num_subscribers;
+    int num_publishers;
+    struct subscriber subscribers[MAX_SUBSCRIBERS];
+    struct publisher publisher[MAX_PUBLISHERS];
 };
 
 enum operations {
@@ -84,6 +86,10 @@ struct response {
     enum status response_status;
     int id;
 };
+
+void talk_to_publisher();
+
+void talk_to_subscriber();
 
 void sighandler(int signum);
 

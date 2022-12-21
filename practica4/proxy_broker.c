@@ -18,6 +18,17 @@ void sighandler(int signum){
     exit(1);
 }
 
+
+void talk_to_publisher(){
+    DEBUG_PRINTF("TALKING TO PUBLISHER\n");
+    // Wait for a message from the publisher.
+    // Then check topic and send message to all subscribers.
+}
+
+void talk_to_subscriber(){
+    DEBUG_PRINTF("TALKING TO SUBSCRIBER\n");    
+}
+
 void init_broker(char* ip, int port, char* mode_){
 
     //DEBUG_PRINTF("Server create socket\n");
@@ -294,6 +305,13 @@ void *talk_to_client(void *ptr){
             printf("\t%s: %d Suscriptores - %d Publicadores\n",
             all_topics[i].name, all_topics[i].num_subscribers, all_topics[i].num_publishers);
         }
+    }
+
+    // Listen to client and communicate.
+    if ( (message.action == REGISTER_PUBLISHER) && (response.id != -1)){
+        talk_to_publisher();
+    } else if ( (message.action == REGISTER_SUBSCRIBER) && (response.id != -1)){
+        talk_to_subscriber();
     }
 
     pthread_exit(NULL);  
