@@ -10,28 +10,30 @@ int client_id;
 
 void start_data_transfer(){
     struct publish publish;
-    struct timespec time;
+    struct timespec time, time_epoch;
     long received_seconds, received_nanoseconds, generated_seconds, generated_nanoseconds;
 
-    // Wait for data from the broker
-    if (recv(client_socket, (void *)&publish, sizeof(publish), 0) < 0){
-        warnx("recv() failed. %s\n", strerror(errno));
-        exit(1);
+    while(1){
+        // Wait for data from the broker
+        if (recv(client_socket, (void *)&publish, sizeof(publish), 0) < 0){
+            warnx("recv() failed. %s\n", strerror(errno));
+            exit(1);
+        }
+
+        clock_gettime(CLOCK_MONOTONIC, &time);
+        clock_gettime(CLOCK_REALTIME, &time_epoch);
+        received_seconds = time_epoch.tv_sec;
+        received_nanoseconds = time_epoch.tv_nsec;
+        generated_seconds = publish.time_generated_data.tv_sec;
+        generated_nanoseconds = publish.time_generated_data.tv_nsec;
+
+        printf("[%ld.%ld] Recibido mensaje topic: %s - mensaje: %s - Generó: %ld.%ld"
+        "- Recibido: %ld.%ld - Latencia: %ld.%ld\n",
+        time.tv_sec, time.tv_nsec, client_topic, publish.data, 
+        generated_seconds, generated_nanoseconds, received_seconds,
+        received_nanoseconds, received_seconds-generated_seconds,
+        received_nanoseconds-generated_nanoseconds); 
     }
-
-    clock_gettime(CLOCK_MONOTONIC, &time);
-    received_seconds = time.tv_sec;
-    received_nanoseconds = time.tv_nsec;
-    generated_seconds = publish.time_generated_data.tv_sec;
-    generated_nanoseconds = publish.time_generated_data.tv_nsec;
-
-    printf("[%ld.%ld] Recibido mensaje topic: %s - mensaje: %s - Generó: %ld.%ld"
-    "- Recibido: %ld.%ld - Latencia: %ld.%ld\n",
-    received_seconds, received_nanoseconds, client_topic, publish.data, 
-    generated_seconds, generated_nanoseconds, received_seconds,
-    received_nanoseconds, received_seconds-generated_seconds,
-    received_nanoseconds-generated_nanoseconds); 
-
 }
 
 void sighandler(int signum){
@@ -42,6 +44,7 @@ void sighandler(int signum){
     struct message message;
     message.action = UNREGISTER_SUBSCRIBER;
     strcpy(message.topic, client_topic);
+    message.id = client_id;
 
     if (send(client_socket, (void *)&message, sizeof(message), 0) < 0){
         warnx("send() failed. %s\n", strerror(errno));
@@ -135,7 +138,8 @@ void talk_to_server(char *topic, char *ip, int port){
         time_seconds, time_nanoseconds, response.id, topic);    
     } else {
         printf("[%ld.%ld] Error al hacer el registro: error=%d\n",
-        time_seconds, time_nanoseconds, response.response_status);       
+        time_seconds, time_nanoseconds, response.response_status);    
+        exit(1);   
     }
 
     DEBUG_PRINTF("Message sent\n");

@@ -51,7 +51,7 @@ struct topic {
     int num_subscribers;
     int num_publishers;
     struct subscriber subscribers[MAX_SUBSCRIBERS];
-    struct publisher publisher[MAX_PUBLISHERS];
+    struct publisher publishers[MAX_PUBLISHERS];
 };
 
 enum operations {
@@ -87,9 +87,17 @@ struct response {
     int id;
 };
 
-void talk_to_publisher();
+void publish_msg(struct message message);
 
-void talk_to_subscriber();
+void shift_client_list(struct topic topic, int action, int id);
+
+int get_topic_id(char *topic);
+
+void unregister(int action, char *topic, int id);
+
+void talk_to_publisher(int client_socket_);
+
+void talk_to_subscriber(int client_socket_);
 
 void sighandler(int signum);
 

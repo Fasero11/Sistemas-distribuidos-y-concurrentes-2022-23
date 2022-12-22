@@ -7,10 +7,18 @@ char proc_name[32];
 int server_socket, mode, next_publisher, next_subscriber = 1,
 current_publishers, current_subscribers, current_topics;
 
-struct subscriber all_subscribers[MAX_SUBSCRIBERS];
-struct publisher all_publishers[MAX_PUBLISHERS];
 struct topic all_topics[MAX_TOPICS];
 
+int get_topic_id(char *topic){
+    int topic_id = 0;
+    for(topic_id = 0; topic_id < current_topics; topic_id++){
+        if (strcmp(all_topics[topic_id].name, topic) == 0){
+            break;
+        }
+    }
+
+    return topic_id;
+}
 
 void sighandler(int signum){
     DEBUG_PRINTF("SIGNAL RECEIVED...  bye.\n");
@@ -18,15 +26,132 @@ void sighandler(int signum){
     exit(1);
 }
 
+void shift_client_list(struct topic topic, int action, int id){
+    DEBUG_PRINTF("SHIFTING LIST\n");
+    int i;
+    // Subscriber ID will be its position in the array + 1;
+    // Publisher ID will be its position in the array.
 
-void talk_to_publisher(){
+    // Every client from the one we want to delete to the last one will be
+    // replaced by the one after it.
+    // If we have [0, 1, 2, 3, 4] and we want to delete 2, we do:
+    // [0,1,2,3,4] -> [0,1,3,3,4] -> [0,1,3,4,4]
+    // The last element will be ignored because we reduce the size of the array by 1.
+    // In this case the size was "reduced" by substracting one from
+    // num_subscribers / num_publishers which are the variables we use to iterate.
+    if (action == UNREGISTER_SUBSCRIBER){
+        for(i = id-1; i < MAX_SUBSCRIBERS-1; i++){
+            topic.subscribers[i] = topic.subscribers[i+1];  
+        }
+    } else if (action == UNREGISTER_PUBLISHER){
+        for(i = id; i < MAX_PUBLISHERS-1; i++){
+            topic.publishers[i] = topic.publishers[i+1];  
+        }
+    }
+
+}
+
+void unregister(int action, char *topic_name, int id){
+    DEBUG_PRINTF("UNREGISTER %d: Topic: %s, ID: %d\n", action, topic_name, id);
+    int topic_id = get_topic_id(topic_name);
+
+    struct topic topic = all_topics[topic_id];
+
+    DEBUG_PRINTF("UNREGISTER TOPIC: %s. Topic ID: %d. Subs: %d, Pubs: %d\n",
+     topic.name, topic_id, topic.num_subscribers, topic.num_publishers);
+
+    // Remove client from list and shift all the clients after him one position left.
+    // Remove one from topic counter.
+    if (action == UNREGISTER_SUBSCRIBER){
+        shift_client_list(topic, action, id);
+        topic.num_subscribers--;
+        next_subscriber--; // So that we assign the correct id to the next registered subscriber
+    } else if (action == UNREGISTER_PUBLISHER){
+        topic.num_publishers--;
+        next_publisher--; // So that we assign the correct id to the next registered publisher
+    }
+
+    DEBUG_PRINTF("UNREGISTER TOPIC: %s. Topic ID: %d. Subs: %d, Pubs: %d\n",
+     topic.name, topic_id, topic.num_subscribers, topic.num_publishers);
+
+}
+
+void publish_msg(struct message message){
+    // SECUENCIAL
+    struct publish publish;
+    int socket, topic_id, num_subs, i;   
+
+    strcpy(publish.data, message.data.data);
+    publish.time_generated_data = message.data.time_generated_data;
+    topic_id = get_topic_id(message.topic);
+    num_subs = all_topics[topic_id].num_subscribers;
+    for(i = 0; i < num_subs; i++){
+        socket = all_topics[topic_id].subscribers[i].fd;
+        DEBUG_PRINTF("MSG SENT. FD: %d\n", socket);
+        if (send(socket, (void *)&publish, sizeof(publish), 0) < 0){
+            warnx("send() failed. %s\n", strerror(errno));
+            exit(1);
+        }
+
+    }
+}
+
+void talk_to_publisher(int client_socket_){
+    int action, id;
+    char *data;
+    struct message message;
+    struct timespec time_generated_data, time_received_data;
+    long gen_sec, gen_nsec, recv_sec, recv_nsec;
+
     DEBUG_PRINTF("TALKING TO PUBLISHER\n");
     // Wait for a message from the publisher.
     // Then check topic and send message to all subscribers.
+    while(1){
+        if (recv(client_socket_, (void *)&message, sizeof(message), 0) < 0){
+            warnx("recv() failed. %s\n", strerror(errno));
+            exit(1);
+        }
+
+        action = message.action;
+        if(action == UNREGISTER_PUBLISHER){
+            id = message.id;
+            DEBUG_PRINTF("RECV: UNREGISTER %d: Topic: %s, ID: %d\n", action, message.topic, id);
+            unregister(action, message.topic, id);
+        } else if(action == PUBLISH_DATA){
+            data = message.data.data;
+            time_generated_data = message.data.time_generated_data;
+
+            clock_gettime(CLOCK_MONOTONIC, &time_received_data);
+
+            gen_sec = time_generated_data.tv_sec;
+            gen_nsec = time_generated_data.tv_nsec;
+            recv_sec = time_received_data.tv_sec;
+            recv_nsec = time_received_data.tv_nsec;
+
+            printf("[%ld.%ld] Recibido mensaje para publicar en topic: %s - mensaje: %s - Generó %ld.%ld\n", 
+            recv_sec, recv_nsec, message.topic, data, gen_sec, gen_nsec);
+
+            publish_msg(message);
+        } 
+    }
 }
 
-void talk_to_subscriber(){
-    DEBUG_PRINTF("TALKING TO SUBSCRIBER\n");    
+void talk_to_subscriber(int client_socket_){
+    int action;
+    DEBUG_PRINTF("TALKING TO SUBSCRIBER\n");
+    struct message message;
+    if (recv(client_socket_, (void *)&message, sizeof(message), 0) < 0){
+        warnx("recv() failed. %s\n", strerror(errno));
+        exit(1);
+    }
+
+    action = message.action;
+    if(action == UNREGISTER_SUBSCRIBER){
+        char *topic = message.topic; 
+        int id = message.id;
+        DEBUG_PRINTF("RECV: UNREGISTER %d: Topic: %s, ID: %d\n", action, topic, id);
+        unregister(action, topic, id);
+    } 
 }
 
 void init_broker(char* ip, int port, char* mode_){
@@ -199,7 +324,13 @@ void *talk_to_client(void *ptr){
                 new_subscriber.fd = client_socket_;                 // Fill the FD used to communicate with this subscriber
                 strcpy(new_subscriber.topic, message.topic);        // Fill the topic this subscriber is listening from.
                 new_subscriber.id = next_subscriber;                // Fill the ID of this subscriber.
-                all_subscribers[next_subscriber] = new_subscriber;  // Add this subscriber to the list of all subscribers.
+                            
+                // Serach for the requested topic.                            
+                // Add publisher to current topic's publishers list.
+                // topic_id identifies de position of the topic in the all_topics list.
+                int topic_id = get_topic_id(message.topic);
+                int topic_subscribers = all_topics[topic_id].num_subscribers;
+                all_topics[topic_id].subscribers[topic_subscribers] = new_subscriber;
 
                 // Fill variables for printing message.
                 id = next_subscriber;
@@ -229,10 +360,10 @@ void *talk_to_client(void *ptr){
     } else if (message.action == REGISTER_PUBLISHER){
 
         // Check if the topic the Publisher wants to use exists.
-        int i;
+        int topic_id;
         int topic_exists = 0;
-        for(i = 0; i < current_topics; i++){
-            if (strcmp(all_topics[i].name, message.topic) == 0){
+        for(topic_id = 0; topic_id < current_topics; topic_id++){
+            if (strcmp(all_topics[topic_id].name, message.topic) == 0){
                 DEBUG_PRINTF("Topic %s already exists.\n", message.topic);
                 topic_exists = 1;
                 break;
@@ -248,7 +379,12 @@ void *talk_to_client(void *ptr){
                 new_publisher.fd = client_socket_;              // Fill the FD used to communicate with this publisher
                 strcpy(new_publisher.topic, message.topic);     // Fill the topic this publisher is writing to.
                 new_publisher.id = next_publisher;              // Fill the ID of this publisher.
-                all_publishers[next_publisher] = new_publisher; // Add this publisher to the list of all publisher. 
+
+                // Add publisher to current topic's publishers list.
+                // topic_id was obtained when we checked if the topic existed.
+                // It identifies de position of the topic in the all_topics list.
+                int topic_publishers = all_topics[topic_id].num_publishers;
+                all_topics[topic_id].publishers[topic_publishers] = new_publisher;
 
                 // Fill variables for printing message.
                 id = next_publisher;
@@ -296,9 +432,9 @@ void *talk_to_client(void *ptr){
 
             if (strcmp(topic, all_topics[i].name) == 0){
                 if (strcmp(client_type, "Publicador") == 0){
-                    all_topics[i].num_publishers++;
+                    all_topics[i].num_publishers++; // Increase current topic publishers counter
                 }  else {
-                    all_topics[i].num_subscribers++;
+                    all_topics[i].num_subscribers++;// Increase current topic subscribers counter
                 }
             }
 
@@ -309,9 +445,9 @@ void *talk_to_client(void *ptr){
 
     // Listen to client and communicate.
     if ( (message.action == REGISTER_PUBLISHER) && (response.id != -1)){
-        talk_to_publisher();
+        talk_to_publisher(client_socket_);
     } else if ( (message.action == REGISTER_SUBSCRIBER) && (response.id != -1)){
-        talk_to_subscriber();
+        talk_to_subscriber(client_socket_);
     }
 
     pthread_exit(NULL);  

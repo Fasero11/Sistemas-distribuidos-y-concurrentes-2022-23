@@ -6,20 +6,79 @@ char proc_name[32];
 int client_socket;
 int mode;
 char client_topic[100];
+int client_id;
 
 void sighandler(int signum){
     DEBUG_PRINTF("SIGNAL RECEIVED...  bye.\n");
+    struct timespec time;
+    long seconds, nanoseconds;
+
     struct message message;
     message.action = UNREGISTER_PUBLISHER;
     strcpy(message.topic, client_topic);
+    message.id = client_id;
 
     if (send(client_socket, (void *)&message, sizeof(message), 0) < 0){
         warnx("send() failed. %s\n", strerror(errno));
         exit(1);
     }
 
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    seconds = time.tv_sec;
+    nanoseconds = time.tv_nsec;
+
+    printf("[%ld.%ld] De-Registrado (%d) correctamente del broker.\n",
+    seconds, nanoseconds, client_id); 
+
     close(client_socket);
     exit(1);
+}
+
+void start_data_transfer(){
+    DEBUG_PRINTF("Publishing...\n");  
+    struct publish publish;
+    struct message message;
+    struct timespec time, time_epoch;
+    long time_seconds, time_seconds_epoch,time_nanoseconds, time_nanoseconds_epoch;
+
+    message.action = PUBLISH_DATA;
+
+    FILE* ptr;
+    ptr = fopen("/proc/loadavg", "r");
+
+    while(1){
+
+        sleep(3);
+
+        clock_gettime(CLOCK_MONOTONIC, &time);        // Get monotic time (used in rest of the program)
+        clock_gettime(CLOCK_REALTIME, &time_epoch);   // Get epoch time (For msg generated time)
+        
+        // Generate Data
+        if (ptr != NULL){
+            fread(publish.data, sizeof(char), 100, ptr);
+        }
+
+        DEBUG_PRINTF("DATA READ: %s\n",publish.data);
+
+        time_seconds_epoch = time_epoch.tv_sec;
+        time_nanoseconds_epoch = time_epoch.tv_nsec;
+        time_seconds = time.tv_sec;
+        time_nanoseconds = time.tv_nsec;
+
+        publish.time_generated_data = time_epoch;
+        message.data = publish;
+        strcpy(message.topic, client_topic);
+
+        printf("[%ld.%ld] Publicado mensaje topic: %s - mensaje: %s - Generó %ld.%ld\n",
+        time_seconds, time_nanoseconds, client_topic, publish.data,
+        time_seconds_epoch, time_nanoseconds_epoch);
+
+        if (send(client_socket, (void *)&message, sizeof(message), 0) < 0){
+            warnx("send() failed. %s\n", strerror(errno));
+            exit(1);
+    }
+
+    }
 }
 
 void set_name (char name[6]){
@@ -89,6 +148,8 @@ void talk_to_server(char *topic){
         exit(1);
     }
 
+    client_id = response.id;
+
     clock_gettime(CLOCK_MONOTONIC, &time);
     time_seconds = time.tv_sec;
     time_nanoseconds = time.tv_nsec;
@@ -97,9 +158,12 @@ void talk_to_server(char *topic){
         time_seconds, time_nanoseconds, response.id, topic);    
     } else {
         printf("[%ld.%ld] Error al hacer el registro: error=%d\n",
-        time_seconds, time_nanoseconds, response.response_status);       
+        time_seconds, time_nanoseconds, response.response_status);
+        exit(1);       
     }
 
     DEBUG_PRINTF("Message sent\n"); 
+
+    start_data_transfer();
 
 }
