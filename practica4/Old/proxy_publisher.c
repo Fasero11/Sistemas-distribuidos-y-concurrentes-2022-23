@@ -145,7 +145,6 @@ void talk_to_server(char *topic){
     printf("[%ld.%ld] Publisher conectado con broker correctamente\n",
     time_seconds, time_nanoseconds);
 
-
     DEBUG_PRINTF("action: %d, topic: %s\n",message.action, message.topic);  
     if (send(client_socket, (void *)&message, sizeof(message), 0) < 0){
         warnx("send() failed. %s\n", strerror(errno));

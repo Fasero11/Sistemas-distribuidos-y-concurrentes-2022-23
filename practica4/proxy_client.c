@@ -54,8 +54,8 @@ void transfer_publisher(){
     DEBUG_PRINTF("Publishing...\n");  
     struct publish publish;
     struct message message;
-    struct timespec time, time_epoch;
-    long time_seconds, time_seconds_epoch,time_nanoseconds, time_nanoseconds_epoch;
+    struct timespec time;
+    long time_seconds, time_nanoseconds;
 
     message.action = PUBLISH_DATA;
 
@@ -66,8 +66,7 @@ void transfer_publisher(){
 
         sleep(3);
 
-        clock_gettime(CLOCK_REALTIME, &time);        // Get monotic time (used in rest of the program)
-        clock_gettime(CLOCK_REALTIME, &time_epoch);   // Get epoch time (For msg generated time)
+        clock_gettime(CLOCK_REALTIME, &time);
         
         // Generate Data
         if (ptr != NULL){
@@ -76,18 +75,16 @@ void transfer_publisher(){
 
         DEBUG_PRINTF("DATA READ: %s\n",publish.data);
 
-        time_seconds_epoch = time_epoch.tv_sec;
-        time_nanoseconds_epoch = time_epoch.tv_nsec;
         time_seconds = time.tv_sec;
         time_nanoseconds = time.tv_nsec;
 
-        publish.time_generated_data = time_epoch;
+        publish.time_generated_data = time;
         message.data = publish;
         strcpy(message.topic, client_topic);
 
         printf("[%ld.%ld] Publicado mensaje topic: %s - mensaje: %s - Generó %ld.%ld\n",
         time_seconds, time_nanoseconds, client_topic, publish.data,
-        time_seconds_epoch, time_nanoseconds_epoch);
+        time_seconds, time_nanoseconds);
 
         if (send(client_socket, (void *)&message, sizeof(message), 0) < 0){
             warnx("send() failed. %s\n", strerror(errno));
@@ -98,10 +95,12 @@ void transfer_publisher(){
 
 void transfer_subscriber(){
     struct publish publish;
-    struct timespec time, time_epoch;
+    struct timespec time;
     long received_seconds, received_nanoseconds,
     generated_seconds, generated_nanoseconds,
     latency_seconds, latency_nanoseconds;
+
+    float latency;
 
     while(1){
         // Wait for data from the broker
@@ -111,9 +110,8 @@ void transfer_subscriber(){
         }
 
         clock_gettime(CLOCK_REALTIME, &time);
-        clock_gettime(CLOCK_REALTIME, &time_epoch);
-        received_seconds = time_epoch.tv_sec;
-        received_nanoseconds = time_epoch.tv_nsec;
+        received_seconds = time.tv_sec;
+        received_nanoseconds = time.tv_nsec;
         generated_seconds = publish.time_generated_data.tv_sec;
         generated_nanoseconds = publish.time_generated_data.tv_nsec;
 
@@ -125,11 +123,15 @@ void transfer_subscriber(){
             latency_nanoseconds = received_nanoseconds - generated_nanoseconds;
         }
 
+        latency = latency_seconds + latency_nanoseconds / 1000000000.f;
+        DEBUG_PRINTF("Secs,Nsecs %ld.%ld\n",latency_seconds, latency_nanoseconds);
+        DEBUG_PRINTF("Lat.(Secs) %f\n", latency);
+
         printf("[%ld.%ld] Recibido mensaje topic: %s - mensaje: %s - Generó: %ld.%ld"
-        "- Recibido: %ld.%ld - Latencia: %ld.%ld\n",
+        "- Recibido: %ld.%ld - Latencia: %f\n",
         time.tv_sec, time.tv_nsec, client_topic, publish.data, 
         generated_seconds, generated_nanoseconds, received_seconds,
-        received_nanoseconds, latency_seconds, latency_nanoseconds); 
+        received_nanoseconds, latency); 
     }
 }
 
