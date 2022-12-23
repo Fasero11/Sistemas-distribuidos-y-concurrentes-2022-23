@@ -15,6 +15,7 @@ sigset_t just_signal;
 
 pthread_mutex_t mutex;
 pthread_mutex_t mutex2;
+pthread_mutex_t mutex3;
 pthread_cond_t just_condition;
 
 int get_topic_id(char *topic){
@@ -45,11 +46,8 @@ void shift_client_list(struct topic *topic, int action, int id){
 
     // Every client from the one we want to delete to the last one will be
     // replaced by the one after it.
-    // If we have [0, 1, 2, 3, 4] and we want to delete 2, we do:
-    // [0,1,2,3,4] -> [0,1,3,3,4] -> [0,1,3,4,4]
-    // The last element will be ignored because we reduce the size of the array by 1.
-    // In this case the size was "reduced" by substracting one from
-    // num_subscribers / num_publishers which are the variables we use to iterate.
+    // If we have [1, 2, 3, 4, 0] and we want to delete 2, we do:
+    // [1,2,3,4,0] -> [1,3,3,4,0] -> [1,3,4,0,0]
 
     if (action == UNREGISTER_SUBSCRIBER){
         
@@ -154,7 +152,7 @@ void unregister(int action, char *topic_name, int id){
      all_topics[topic_id].name, topic_id, 
      all_topics[topic_id].num_subscribers, all_topics[topic_id].num_publishers);
 
-    clock_gettime(CLOCK_MONOTONIC, &time);
+    clock_gettime(CLOCK_REALTIME, &time);
     time_seconds = time.tv_sec;
     time_nanoseconds = time.tv_nsec;
 
@@ -258,7 +256,7 @@ void publish_msg(struct message message){
     int num_subscribers = all_topics[topic_id].num_subscribers;
 
     //.//.//.//.//.//. PRINT MESSAGE //.//.//.//.//.//.
-    clock_gettime(CLOCK_MONOTONIC, &time);
+    clock_gettime(CLOCK_REALTIME, &time);
     time_seconds = time.tv_sec;
     time_nanoseconds = time.tv_nsec;
 
@@ -334,7 +332,7 @@ void talk_to_publisher(int client_socket_){
             data = message.data.data;
             time_generated_data = message.data.time_generated_data;
 
-            clock_gettime(CLOCK_MONOTONIC, &time_received_data);
+            clock_gettime(CLOCK_REALTIME, &time_received_data);
 
             gen_sec = time_generated_data.tv_sec;
             gen_nsec = time_generated_data.tv_nsec;
@@ -517,10 +515,12 @@ void *talk_to_client(void *ptr){
         exit(1);
     }
 
+    pthread_mutex_lock(&mutex3); // Prevents threads to modify a topic at the same time
+
     DEBUG_PRINTF("New message: action: %d, topic: %s\n",message.action, message.topic);
 
     // Get time when the message was recieved for printing
-    clock_gettime(CLOCK_MONOTONIC, &time);
+    clock_gettime(CLOCK_REALTIME, &time);
     time_seconds = time.tv_sec;
     time_nanoseconds = time.tv_nsec;
 
@@ -655,6 +655,8 @@ void *talk_to_client(void *ptr){
             all_topics[i].name, all_topics[i].num_subscribers, all_topics[i].num_publishers);
         }
     }
+
+    pthread_mutex_unlock(&mutex3);
 
     // Listen to client and communicate.
     if ( (message.action == REGISTER_PUBLISHER) && (response.id != -1)){

@@ -22,7 +22,7 @@ void start_data_transfer(){
             exit(1);
         }
 
-        clock_gettime(CLOCK_MONOTONIC, &time);
+        clock_gettime(CLOCK_REALTIME, &time);
         clock_gettime(CLOCK_REALTIME, &time_epoch);
         received_seconds = time_epoch.tv_sec;
         received_nanoseconds = time_epoch.tv_nsec;
@@ -69,7 +69,7 @@ void sighandler(int signum){
         }
     } while (response.response_status != OK);
 
-    clock_gettime(CLOCK_MONOTONIC, &time);
+    clock_gettime(CLOCK_REALTIME, &time);
     seconds = time.tv_sec;
     nanoseconds = time.tv_nsec;
 
@@ -129,7 +129,7 @@ void talk_to_server(char *topic, char *ip, int port){
 
     socket_connect(client_socket);
 
-    clock_gettime(CLOCK_MONOTONIC, &time);
+    clock_gettime(CLOCK_REALTIME, &time);
     time_seconds = time.tv_sec;
     time_nanoseconds = time.tv_nsec;
     printf("[%ld.%ld] Subscriber conectado con broker (%s:%d)\n",
@@ -148,7 +148,7 @@ void talk_to_server(char *topic, char *ip, int port){
 
     client_id = response.id; 
 
-    clock_gettime(CLOCK_MONOTONIC, &time);
+    clock_gettime(CLOCK_REALTIME, &time);
     time_seconds = time.tv_sec;
     time_nanoseconds = time.tv_nsec;
     if (response.response_status == OK){

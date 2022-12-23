@@ -32,7 +32,7 @@ void sighandler(int signum){
         }
     } while (response.response_status != OK);
 
-    clock_gettime(CLOCK_MONOTONIC, &time);
+    clock_gettime(CLOCK_REALTIME, &time);
     seconds = time.tv_sec;
     nanoseconds = time.tv_nsec;
 
@@ -59,7 +59,7 @@ void start_data_transfer(){
 
         sleep(3);
 
-        clock_gettime(CLOCK_MONOTONIC, &time);        // Get monotic time (used in rest of the program)
+        clock_gettime(CLOCK_REALTIME, &time);        // Get monotic time (used in rest of the program)
         clock_gettime(CLOCK_REALTIME, &time_epoch);   // Get epoch time (For msg generated time)
         
         // Generate Data
@@ -139,7 +139,7 @@ void talk_to_server(char *topic){
 
     socket_connect(client_socket);
 
-    clock_gettime(CLOCK_MONOTONIC, &time);
+    clock_gettime(CLOCK_REALTIME, &time);
     time_seconds = time.tv_sec;
     time_nanoseconds = time.tv_nsec;
     printf("[%ld.%ld] Publisher conectado con broker correctamente\n",
@@ -159,7 +159,7 @@ void talk_to_server(char *topic){
 
     client_id = response.id;
 
-    clock_gettime(CLOCK_MONOTONIC, &time);
+    clock_gettime(CLOCK_REALTIME, &time);
     time_seconds = time.tv_sec;
     time_nanoseconds = time.tv_nsec;
     if (response.response_status == OK){
