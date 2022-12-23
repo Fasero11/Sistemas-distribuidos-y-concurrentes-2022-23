@@ -13,6 +13,7 @@ int just_threads;
 sigset_t just_signal;
 
 pthread_mutex_t mutex;
+pthread_mutex_t mutex2;
 pthread_cond_t just_condition;
 
 int get_topic_id(char *topic){
@@ -63,23 +64,26 @@ void unregister(int action, char *topic_name, int id){
 
     struct topic topic = all_topics[topic_id];
 
-    DEBUG_PRINTF("UNREGISTER TOPIC: %s. Topic ID: %d. Subs: %d, Pubs: %d\n",
+    DEBUG_PRINTF("A UNREGISTER TOPIC: %s. Topic ID: %d. Subs: %d, Pubs: %d\n",
      topic.name, topic_id, topic.num_subscribers, topic.num_publishers);
 
     // Remove client from list and shift all the clients after him one position left.
     // Remove one from topic counter.
     if (action == UNREGISTER_SUBSCRIBER){
-        shift_client_list(topic, action, id);
-        topic.num_subscribers--;
+        shift_client_list(all_topics[topic_id], action, id);
+        all_topics[topic_id].num_subscribers--;
         next_subscriber--; // So that we assign the correct id to the next registered subscriber
     } else if (action == UNREGISTER_PUBLISHER){
-        topic.num_publishers--;
+        shift_client_list(all_topics[topic_id], action, id);
+        all_topics[topic_id].num_publishers--;
         next_publisher--; // So that we assign the correct id to the next registered publisher
     }
 
-    DEBUG_PRINTF("UNREGISTER TOPIC: %s. Topic ID: %d. Subs: %d, Pubs: %d\n",
+    DEBUG_PRINTF("B UNREGISTER TOPIC: %s. Topic ID: %d. Subs: %d, Pubs: %d\n",
      topic.name, topic_id, topic.num_subscribers, topic.num_publishers);
 
+    // As the client disconnected, we don't need this thread anymore.
+    pthread_exit(NULL); 
 }
 
 void send_sequential(struct message message){
@@ -124,27 +128,28 @@ void* send_just(void *ptr){
 
     // All the threads will wait for the signal
     // The number of threads to join is equal to the number of subscribers.
-    // The last thread with signal the rest to continue.
+    // The last thread will pass and signal the rest to continue.
 
     pthread_mutex_lock(&mutex);
     just_threads++;
     
-    DEBUG_PRINTF("just_threads, %d, subs: %d\n", just_threads, all_topics[topic_id].num_subscribers);
-    if (just_threads == all_topics[topic_id].num_subscribers - 1){
-        pthread_cond_signal(&just_condition);
-        pthread_mutex_unlock(&mutex);
-        just_threads = 0;    
-    }
+    DEBUG_PRINTF("just_threads, %d, subs: %d FD: %d\n", 
+    just_threads, all_topics[topic_id].num_subscribers, send_message.fd);
 
-    DEBUG_PRINTF("WAITING... FD: %d\n",send_message.fd);
-    pthread_cond_wait(&just_condition, &mutex);
+    // All threads except the last one will wait.
+    if (just_threads < all_topics[topic_id].num_subscribers){
+        DEBUG_PRINTF("WAITING... FD: %d\n",send_message.fd);
+        pthread_cond_wait(&just_condition, &mutex);
+    }
+    just_threads--;
     // Release the mutex immediatly so the next thread can join.
     // There are no race conditions, so its okay.
-    pthread_cond_signal(&just_condition);
+    pthread_cond_broadcast(&just_condition);
     pthread_mutex_unlock(&mutex); 
 
-    DEBUG_PRINTF("SENDING JUST\n");
-    if (send(send_message.fd, (void *)&send_message.message, sizeof(send_message.message), 0) < 0){
+    DEBUG_PRINTF("SENDING JUST. FD: %d\n", send_message.fd);
+    if (send(send_message.fd, (void *)&send_message.message, 
+    sizeof(send_message.message), 0) < 0){
         warnx("send() failed. %s\n", strerror(errno));
         exit(1);
     }
@@ -165,7 +170,6 @@ void publish_msg(struct message message){
         for(i = 0; i < num_subscribers; i++){
             struct send_message *send_message = malloc(256);
             send_message->message = message;
-            send_message->id = i;
             send_message->fd = all_topics[topic_id].subscribers[i].fd;
             pthread_t new_thread;
             if (pthread_create(&new_thread, NULL, send_parallel, (void *) send_message) < 0){
@@ -176,6 +180,13 @@ void publish_msg(struct message message){
         
 
     } else if (mode == JUSTO){
+        // This mutex2 protects the variable just_threads used in send_just()
+        // if two threads want to publish at the same time.
+
+        // A thread will create as many threads as subscribers in the topic.
+        // We want only the threads created by this one to modify just_threads.
+        // We don't want the threads created by another one to modify it at the same time.
+        pthread_mutex_lock(&mutex2);
         int topic_id = get_topic_id(message.topic);
         int num_subscribers = all_topics[topic_id].num_subscribers;
         int i;
@@ -183,7 +194,6 @@ void publish_msg(struct message message){
         for(i = 0; i < num_subscribers; i++){
             struct send_message *send_message = malloc(256);
             send_message->message = message;
-            send_message->id = i;
             send_message->fd = all_topics[topic_id].subscribers[i].fd;
             if (pthread_create(&threads[i], NULL, send_just, (void *) send_message) < 0){
                 warnx("Error while creating Thread\n");
@@ -193,6 +203,7 @@ void publish_msg(struct message message){
         for(i = 0; i < num_subscribers; i++){
             pthread_join(threads[i], NULL);
         }
+        pthread_mutex_unlock(&mutex2);
     }
 }
 

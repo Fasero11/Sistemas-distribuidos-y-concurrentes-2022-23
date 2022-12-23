@@ -79,7 +79,6 @@ struct message {
 
 struct send_message {
     struct message message;
-    int id;
     int fd;
 };
 
