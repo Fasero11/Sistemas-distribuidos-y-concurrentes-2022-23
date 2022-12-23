@@ -1,6 +1,6 @@
 // Gonzalo Vega Pérez - 2022
 
-#include "proxy_subscriber.h"
+#include "proxy_client.h"
 
 void print_usage() {
     printf("Usage: subscriber --ip [BROKER_IP] --port [BROKER_PORT] --topic [TOPIC]\n");

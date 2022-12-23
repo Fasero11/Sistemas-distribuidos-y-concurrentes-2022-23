@@ -1,6 +1,6 @@
 // Gonzalo Vega Pérez - 2022
 
-#include "proxy_publisher.h"
+#include "proxy_client.h"
 
 void print_usage() {
     printf("Usage: publisher --ip [BROKER_IP] --port [BROKER_PORT] --topic [TOPIC]\n");
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
 
     set_ip_port(ip,port);
 
-    talk_to_server(topic);
+    talk_to_server(topic, ip, port);
 
     exit(EXIT_SUCCESS);
 }
