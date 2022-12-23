@@ -24,6 +24,7 @@
 #include <sys/select.h>
 #include <signal.h>
 #include <getopt.h>
+#include <semaphore.h>
 
 #define MAX_TOPICS 10
 #define MAX_PUBLISHERS 100
@@ -76,6 +77,12 @@ struct message {
     struct publish data;
 };
 
+struct send_message {
+    struct message message;
+    int id;
+    int fd;
+};
+
 enum status {
     ERROR = 0,
     LIMIT,
@@ -86,6 +93,12 @@ struct response {
     enum status response_status;
     int id;
 };
+
+void send_sequential(struct message message);
+
+void* send_parallel(void *ptr);
+
+void* send_just(void *ptr);
 
 void publish_msg(struct message message);
 

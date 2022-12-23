@@ -9,6 +9,12 @@ current_publishers, current_subscribers, current_topics;
 
 struct topic all_topics[MAX_TOPICS];
 
+int just_threads;
+sigset_t just_signal;
+
+pthread_mutex_t mutex;
+pthread_cond_t just_condition;
+
 int get_topic_id(char *topic){
     int topic_id = 0;
     for(topic_id = 0; topic_id < current_topics; topic_id++){
@@ -76,7 +82,8 @@ void unregister(int action, char *topic_name, int id){
 
 }
 
-void publish_msg(struct message message){
+void send_sequential(struct message message){
+    DEBUG_PRINTF("SENDING SEQUENTIAL\n");
     // SECUENCIAL
     struct publish publish;
     int socket, topic_id, num_subs, i;   
@@ -92,7 +99,100 @@ void publish_msg(struct message message){
             warnx("send() failed. %s\n", strerror(errno));
             exit(1);
         }
+    }
+}
 
+void* send_parallel(void *ptr){
+    DEBUG_PRINTF("SENDING PARALLEL\n");
+    struct send_message *ptr_msg = (struct send_message*)ptr;
+    struct send_message send_message = *ptr_msg;
+
+    DEBUG_PRINTF("FD: %d\n", send_message.fd);
+
+    if (send(send_message.fd, (void *)&send_message.message, sizeof(send_message.message), 0) < 0){
+         warnx("send() failed. %s\n", strerror(errno));
+        exit(1);
+    }
+
+    pthread_exit(NULL);
+}
+
+void* send_just(void *ptr){
+    struct send_message *ptr_msg = (struct send_message*)ptr;
+    struct send_message send_message = *ptr_msg;
+    int topic_id = get_topic_id(send_message.message.topic);
+
+    // All the threads will wait for the signal
+    // The number of threads to join is equal to the number of subscribers.
+    // The last thread with signal the rest to continue.
+
+    pthread_mutex_lock(&mutex);
+    just_threads++;
+    
+    DEBUG_PRINTF("just_threads, %d, subs: %d\n", just_threads, all_topics[topic_id].num_subscribers);
+    if (just_threads == all_topics[topic_id].num_subscribers - 1){
+        pthread_cond_signal(&just_condition);
+        pthread_mutex_unlock(&mutex);
+        just_threads = 0;    
+    }
+
+    DEBUG_PRINTF("WAITING... FD: %d\n",send_message.fd);
+    pthread_cond_wait(&just_condition, &mutex);
+    // Release the mutex immediatly so the next thread can join.
+    // There are no race conditions, so its okay.
+    pthread_cond_signal(&just_condition);
+    pthread_mutex_unlock(&mutex); 
+
+    DEBUG_PRINTF("SENDING JUST\n");
+    if (send(send_message.fd, (void *)&send_message.message, sizeof(send_message.message), 0) < 0){
+        warnx("send() failed. %s\n", strerror(errno));
+        exit(1);
+    }
+    
+    pthread_exit(NULL);
+}
+
+void publish_msg(struct message message){
+    DEBUG_PRINTF("MODE: %d\n", mode);
+    if (mode == SECUENCIAL){
+        send_sequential(message);
+
+    } else if (mode == PARALELO) {
+
+        int topic_id = get_topic_id(message.topic);
+        int num_subscribers = all_topics[topic_id].num_subscribers;
+        int i;
+        for(i = 0; i < num_subscribers; i++){
+            struct send_message *send_message = malloc(256);
+            send_message->message = message;
+            send_message->id = i;
+            send_message->fd = all_topics[topic_id].subscribers[i].fd;
+            pthread_t new_thread;
+            if (pthread_create(&new_thread, NULL, send_parallel, (void *) send_message) < 0){
+                warnx("Error while creating Thread\n");
+                exit(EXIT_FAILURE);
+            }
+        } 
+        
+
+    } else if (mode == JUSTO){
+        int topic_id = get_topic_id(message.topic);
+        int num_subscribers = all_topics[topic_id].num_subscribers;
+        int i;
+        pthread_t threads[num_subscribers];
+        for(i = 0; i < num_subscribers; i++){
+            struct send_message *send_message = malloc(256);
+            send_message->message = message;
+            send_message->id = i;
+            send_message->fd = all_topics[topic_id].subscribers[i].fd;
+            if (pthread_create(&threads[i], NULL, send_just, (void *) send_message) < 0){
+                warnx("Error while creating Thread\n");
+                exit(EXIT_FAILURE);
+            }
+        } 
+        for(i = 0; i < num_subscribers; i++){
+            pthread_join(threads[i], NULL);
+        }
     }
 }
 
@@ -168,11 +268,11 @@ void init_broker(char* ip, int port, char* mode_){
     //DEBUG_PRINTF("Server listening\n");
     socket_listen(server_socket);
 
-    if (strcmp(mode_, "secuencial") != 0 ){
+    if (strcmp(mode_, "secuencial") == 0 ){
         mode = SECUENCIAL;
-    } else if (strcmp(mode_, "paralelo") != 0 ){
+    } else if (strcmp(mode_, "paralelo") == 0 ){
         mode = PARALELO;
-    } else if (strcmp(mode_, "justo") != 0 ){
+    } else if (strcmp(mode_, "justo") == 0 ){
         mode = JUSTO;
     };
 }
