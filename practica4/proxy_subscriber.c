@@ -11,7 +11,9 @@ int client_id;
 void start_data_transfer(){
     struct publish publish;
     struct timespec time, time_epoch;
-    long received_seconds, received_nanoseconds, generated_seconds, generated_nanoseconds;
+    long received_seconds, received_nanoseconds,
+     generated_seconds, generated_nanoseconds,
+     latency_seconds, latency_nanoseconds;
 
     while(1){
         // Wait for data from the broker
@@ -27,12 +29,19 @@ void start_data_transfer(){
         generated_seconds = publish.time_generated_data.tv_sec;
         generated_nanoseconds = publish.time_generated_data.tv_nsec;
 
+        if (received_nanoseconds - generated_nanoseconds < 0){
+            latency_seconds = received_seconds - generated_seconds - 1;
+            latency_nanoseconds = received_nanoseconds - generated_nanoseconds + 1000000000;
+        } else {
+            latency_seconds = received_seconds - generated_seconds;
+            latency_nanoseconds = received_nanoseconds - generated_nanoseconds;
+        }
+
         printf("[%ld.%ld] Recibido mensaje topic: %s - mensaje: %s - Generó: %ld.%ld"
         "- Recibido: %ld.%ld - Latencia: %ld.%ld\n",
         time.tv_sec, time.tv_nsec, client_topic, publish.data, 
         generated_seconds, generated_nanoseconds, received_seconds,
-        received_nanoseconds, received_seconds-generated_seconds,
-        received_nanoseconds-generated_nanoseconds); 
+        received_nanoseconds, latency_seconds, latency_nanoseconds); 
     }
 }
 
@@ -42,14 +51,23 @@ void sighandler(int signum){
     long seconds, nanoseconds;
 
     struct message message;
+    struct response response;
     message.action = UNREGISTER_SUBSCRIBER;
     strcpy(message.topic, client_topic);
     message.id = client_id;
 
-    if (send(client_socket, (void *)&message, sizeof(message), 0) < 0){
-        warnx("send() failed. %s\n", strerror(errno));
-        exit(1);
-    }
+    // Send Unregister until an OK response is received.
+    do {
+        if (send(client_socket, (void *)&message, sizeof(message), 0) < 0){
+            warnx("send() failed. %s\n", strerror(errno));
+            exit(1);
+        }
+
+        if (recv(client_socket, (void *)&response, sizeof(response), 0) < 0){
+            warnx("recv() failed. %s\n", strerror(errno));
+            exit(1);
+        }
+    } while (response.response_status != OK);
 
     clock_gettime(CLOCK_MONOTONIC, &time);
     seconds = time.tv_sec;

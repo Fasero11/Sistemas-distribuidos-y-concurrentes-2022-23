@@ -4,8 +4,9 @@
 struct sockaddr_in addr, client_addr_;
 char proc_name[32];
 
-int server_socket, mode, next_publisher, next_subscriber = 1,
-current_publishers, current_subscribers, current_topics;
+int server_socket, mode, next_publisher_id, next_subscriber_id = 1,
+current_publishers, current_subscribers, current_topics,
+next_pub_position, next_sub_position;
 
 struct topic all_topics[MAX_TOPICS];
 
@@ -33,9 +34,12 @@ void sighandler(int signum){
     exit(1);
 }
 
-void shift_client_list(struct topic topic, int action, int id){
+void shift_client_list(struct topic *topic, int action, int id){
     DEBUG_PRINTF("SHIFTING LIST\n");
+    int client_pos;
     int i;
+    int fd_to_del;
+    struct response response;
     // Subscriber ID will be its position in the array + 1;
     // Publisher ID will be its position in the array.
 
@@ -46,41 +50,121 @@ void shift_client_list(struct topic topic, int action, int id){
     // The last element will be ignored because we reduce the size of the array by 1.
     // In this case the size was "reduced" by substracting one from
     // num_subscribers / num_publishers which are the variables we use to iterate.
-    if (action == UNREGISTER_SUBSCRIBER){
-        for(i = id-1; i < MAX_SUBSCRIBERS-1; i++){
-            topic.subscribers[i] = topic.subscribers[i+1];  
-        }
-    } else if (action == UNREGISTER_PUBLISHER){
-        for(i = id; i < MAX_PUBLISHERS-1; i++){
-            topic.publishers[i] = topic.publishers[i+1];  
-        }
-    }
 
+    if (action == UNREGISTER_SUBSCRIBER){
+        
+        // DEBUG //
+        for (int j = 0; j < 10; j++){
+            DEBUG_PRINTF("Position %d: ID: %d FD: %d\n",
+            j, topic->subscribers[j].id ,
+            topic->subscribers[j].fd);
+        }
+        ///////////
+
+        for(client_pos = 0; client_pos < MAX_SUBSCRIBERS; client_pos++){
+            // If the ids matches, we found our client.
+            if(topic->subscribers[client_pos].id == id){
+                fd_to_del = topic->subscribers[client_pos].fd;
+                break;
+            }  
+        }
+
+        DEBUG_PRINTF("REMOVING SUBSCRIBER. ID: %d, FD: %d POS: %d\n",
+         id, fd_to_del, client_pos);
+
+        for(i = client_pos; i < MAX_SUBSCRIBERS; i++){
+            topic->subscribers[i] = topic->subscribers[i+1];  
+        }
+        
+        // DEBUG //
+        for (int j = 0; j < 10; j++){
+            DEBUG_PRINTF("Position %d: ID: %d FD: %d\n",
+            j, topic->subscribers[j].id ,
+            topic->subscribers[j].fd);
+        }
+        ///////////
+
+    } else if (action == UNREGISTER_PUBLISHER){
+
+        // DEBUG //
+        for (int j = 0; j < 10; j++){
+            DEBUG_PRINTF("Position %d: ID: %d FD: %d\n",
+            j, topic->publishers[j].id ,
+            topic->publishers[j].fd);
+        }
+        ///////////
+
+        for(client_pos = 0; client_pos < MAX_PUBLISHERS; client_pos++){
+            // If the ids matches, we found our client.
+            if(topic->publishers[client_pos].id == id){
+                fd_to_del = topic->publishers[client_pos].fd;
+                break;
+            }  
+        }
+        
+        DEBUG_PRINTF("REMOVING PUBLISHER. ID: %d, FD: %d POS: %d\n",
+         id, fd_to_del, client_pos);
+
+        for(i = client_pos; i < MAX_PUBLISHERS; i++){
+            topic->publishers[i] = topic->publishers[i+1];  
+        }
+
+        // DEBUG //
+        for (int j = 0; j < 10; j++){
+            DEBUG_PRINTF("Position %d: ID: %d FD: %d\n",
+            j, topic->publishers[j].id ,
+            topic->publishers[j].fd);
+        }
+        ///////////
+
+    }
+    response.id = id;
+    response.response_status = OK;
+    if (send(fd_to_del, (void *)&response, sizeof(response), 0) < 0){
+        warnx("send() failed. %s\n", strerror(errno));
+        exit(1);
+    }
+    // FILE DESCRIPTOR WILL BE CLOSED BY CLIENT.
 }
 
 void unregister(int action, char *topic_name, int id){
+    struct timespec time;
+    long time_seconds;
+    long time_nanoseconds;
+
+    char client_type[16]; // For printing
     DEBUG_PRINTF("UNREGISTER %d: Topic: %s, ID: %d\n", action, topic_name, id);
     int topic_id = get_topic_id(topic_name);
-
-    struct topic topic = all_topics[topic_id];
-
-    DEBUG_PRINTF("A UNREGISTER TOPIC: %s. Topic ID: %d. Subs: %d, Pubs: %d\n",
-     topic.name, topic_id, topic.num_subscribers, topic.num_publishers);
 
     // Remove client from list and shift all the clients after him one position left.
     // Remove one from topic counter.
     if (action == UNREGISTER_SUBSCRIBER){
-        shift_client_list(all_topics[topic_id], action, id);
+        strcpy(client_type, "Suscriptor");
+        shift_client_list(&all_topics[topic_id], action, id);
         all_topics[topic_id].num_subscribers--;
-        next_subscriber--; // So that we assign the correct id to the next registered subscriber
+        next_sub_position--;
     } else if (action == UNREGISTER_PUBLISHER){
-        shift_client_list(all_topics[topic_id], action, id);
+        strcpy(client_type, "Publicador");
+        shift_client_list(&all_topics[topic_id], action, id);
         all_topics[topic_id].num_publishers--;
-        next_publisher--; // So that we assign the correct id to the next registered publisher
+        next_pub_position--;
     }
 
-    DEBUG_PRINTF("B UNREGISTER TOPIC: %s. Topic ID: %d. Subs: %d, Pubs: %d\n",
-     topic.name, topic_id, topic.num_subscribers, topic.num_publishers);
+    DEBUG_PRINTF("TOPIC NOW: %s. Topic ID: %d. Subs: %d, Pubs: %d\n",
+     all_topics[topic_id].name, topic_id, 
+     all_topics[topic_id].num_subscribers, all_topics[topic_id].num_publishers);
+
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    time_seconds = time.tv_sec;
+    time_nanoseconds = time.tv_nsec;
+
+    printf("[%ld.%ld] Eliminado Cliente (%d) %s: %s\n Resumen:\n",
+    time_seconds, time_nanoseconds, id, client_type, topic_name);
+    int i;
+    for(i = 0; i < current_topics; i++){
+        printf("\t%s: %d Suscriptores - %d Publicadores\n",
+        all_topics[i].name, all_topics[i].num_subscribers, all_topics[i].num_publishers);
+    }
 
     // As the client disconnected, we don't need this thread anymore.
     pthread_exit(NULL); 
@@ -96,6 +180,7 @@ void send_sequential(struct message message){
     publish.time_generated_data = message.data.time_generated_data;
     topic_id = get_topic_id(message.topic);
     num_subs = all_topics[topic_id].num_subscribers;
+
     for(i = 0; i < num_subs; i++){
         socket = all_topics[topic_id].subscribers[i].fd;
         DEBUG_PRINTF("MSG SENT. FD: %d\n", socket);
@@ -107,13 +192,17 @@ void send_sequential(struct message message){
 }
 
 void* send_parallel(void *ptr){
+    struct publish publish;
     DEBUG_PRINTF("SENDING PARALLEL\n");
     struct send_message *ptr_msg = (struct send_message*)ptr;
     struct send_message send_message = *ptr_msg;
 
     DEBUG_PRINTF("FD: %d\n", send_message.fd);
 
-    if (send(send_message.fd, (void *)&send_message.message, sizeof(send_message.message), 0) < 0){
+    strcpy(publish.data, send_message.message.data.data);
+    publish.time_generated_data = send_message.message.data.time_generated_data;
+
+    if (send(send_message.fd, (void *)&publish, sizeof(publish), 0) < 0){
          warnx("send() failed. %s\n", strerror(errno));
         exit(1);
     }
@@ -125,6 +214,10 @@ void* send_just(void *ptr){
     struct send_message *ptr_msg = (struct send_message*)ptr;
     struct send_message send_message = *ptr_msg;
     int topic_id = get_topic_id(send_message.message.topic);
+    struct publish publish;
+
+    strcpy(publish.data, send_message.message.data.data);
+    publish.time_generated_data = send_message.message.data.time_generated_data;
 
     // All the threads will wait for the signal
     // The number of threads to join is equal to the number of subscribers.
@@ -148,8 +241,8 @@ void* send_just(void *ptr){
     pthread_mutex_unlock(&mutex); 
 
     DEBUG_PRINTF("SENDING JUST. FD: %d\n", send_message.fd);
-    if (send(send_message.fd, (void *)&send_message.message, 
-    sizeof(send_message.message), 0) < 0){
+    if (send(send_message.fd, (void *)&publish, 
+    sizeof(publish), 0) < 0){
         warnx("send() failed. %s\n", strerror(errno));
         exit(1);
     }
@@ -158,14 +251,25 @@ void* send_just(void *ptr){
 }
 
 void publish_msg(struct message message){
-    DEBUG_PRINTF("MODE: %d\n", mode);
+    struct timespec time;
+    long time_seconds;
+    long time_nanoseconds;
+    int topic_id = get_topic_id(message.topic);
+    int num_subscribers = all_topics[topic_id].num_subscribers;
+
+    //.//.//.//.//.//. PRINT MESSAGE //.//.//.//.//.//.
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    time_seconds = time.tv_sec;
+    time_nanoseconds = time.tv_nsec;
+
+    printf("[%ld.%ld] Enviando mensaje en topic %s a %d suscriptores\n",
+    time_seconds, time_nanoseconds, message.topic, num_subscribers);
+    //.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.//.
+
     if (mode == SECUENCIAL){
         send_sequential(message);
 
     } else if (mode == PARALELO) {
-
-        int topic_id = get_topic_id(message.topic);
-        int num_subscribers = all_topics[topic_id].num_subscribers;
         int i;
         for(i = 0; i < num_subscribers; i++){
             struct send_message *send_message = malloc(256);
@@ -187,8 +291,6 @@ void publish_msg(struct message message){
         // We want only the threads created by this one to modify just_threads.
         // We don't want the threads created by another one to modify it at the same time.
         pthread_mutex_lock(&mutex2);
-        int topic_id = get_topic_id(message.topic);
-        int num_subscribers = all_topics[topic_id].num_subscribers;
         int i;
         pthread_t threads[num_subscribers];
         for(i = 0; i < num_subscribers; i++){
@@ -434,7 +536,7 @@ void *talk_to_client(void *ptr){
                 struct subscriber new_subscriber;
                 new_subscriber.fd = client_socket_;                 // Fill the FD used to communicate with this subscriber
                 strcpy(new_subscriber.topic, message.topic);        // Fill the topic this subscriber is listening from.
-                new_subscriber.id = next_subscriber;                // Fill the ID of this subscriber.
+                new_subscriber.id = next_subscriber_id;                // Fill the ID of this subscriber.
                             
                 // Serach for the requested topic.                            
                 // Add publisher to current topic's publishers list.
@@ -444,12 +546,12 @@ void *talk_to_client(void *ptr){
                 all_topics[topic_id].subscribers[topic_subscribers] = new_subscriber;
 
                 // Fill variables for printing message.
-                id = next_subscriber;
+                id = next_subscriber_id;
                 client_type = "Suscriptor";
                 topic = new_subscriber.topic;
 
                 // Fill response message variables.
-                response.id = next_subscriber++;
+                response.id = next_subscriber_id++;
                 response.response_status = OK;
 
                 DEBUG_PRINTF("NEW SUBSCRIBER: fd: %d, topic: %s, id: %d\n",
@@ -484,26 +586,26 @@ void *talk_to_client(void *ptr){
         // If the topic exists
         if(topic_exists){
             // If the publishers limit hasn't been reached yet.
-            if (next_publisher < MAX_PUBLISHERS){
+            if (next_publisher_id < MAX_PUBLISHERS){
                 // Create new publisher structure
                 struct publisher new_publisher;
                 new_publisher.fd = client_socket_;              // Fill the FD used to communicate with this publisher
                 strcpy(new_publisher.topic, message.topic);     // Fill the topic this publisher is writing to.
-                new_publisher.id = next_publisher;              // Fill the ID of this publisher.
+                new_publisher.id = next_publisher_id;              // Fill the ID of this publisher.
 
                 // Add publisher to current topic's publishers list.
                 // topic_id was obtained when we checked if the topic existed.
                 // It identifies de position of the topic in the all_topics list.
                 int topic_publishers = all_topics[topic_id].num_publishers;
-                all_topics[topic_id].publishers[topic_publishers] = new_publisher;
+                all_topics[topic_id].publishers[topic_publishers] = new_publisher; // add at the end of the list.
 
                 // Fill variables for printing message.
-                id = next_publisher;
+                id = next_publisher_id;
                 client_type = "Publicador";
                 topic = new_publisher.topic;
 
                 // Fill response message variables.
-                response.id = next_publisher++;
+                response.id = next_publisher_id++;
                 response.response_status = OK;
 
                 DEBUG_PRINTF("NEW PUBLISHER: fd: %d, topic: %s\n",

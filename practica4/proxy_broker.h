@@ -36,14 +36,16 @@
 
 struct publisher {
     char topic[100];
-    int id;
-    int fd;
+    int id;             // Real id
+    int id_in_topic;    // id inside the topic's publishers array
+    int fd;             // File descriptor for this client
 };
 
 struct subscriber {
     char topic[100];
-    int fd;
-    int id;
+    int id;             // Real id
+    int id_in_topic;    // id inside the topic's subscribers array
+    int fd;             // File descriptor for this client
 };
 
 struct topic {
@@ -101,7 +103,7 @@ void* send_just(void *ptr);
 
 void publish_msg(struct message message);
 
-void shift_client_list(struct topic topic, int action, int id);
+void shift_client_list(struct topic *topic, int action, int id);
 
 int get_topic_id(char *topic);
 

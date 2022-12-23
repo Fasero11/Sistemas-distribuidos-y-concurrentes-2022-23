@@ -14,14 +14,23 @@ void sighandler(int signum){
     long seconds, nanoseconds;
 
     struct message message;
+    struct response response;
     message.action = UNREGISTER_PUBLISHER;
     strcpy(message.topic, client_topic);
     message.id = client_id;
 
-    if (send(client_socket, (void *)&message, sizeof(message), 0) < 0){
-        warnx("send() failed. %s\n", strerror(errno));
-        exit(1);
-    }
+    // Send Unregister until an OK response is received.
+    do {
+        if (send(client_socket, (void *)&message, sizeof(message), 0) < 0){
+            warnx("send() failed. %s\n", strerror(errno));
+            exit(1);
+        }
+
+        if (recv(client_socket, (void *)&response, sizeof(response), 0) < 0){
+            warnx("recv() failed. %s\n", strerror(errno));
+            exit(1);
+        }
+    } while (response.response_status != OK);
 
     clock_gettime(CLOCK_MONOTONIC, &time);
     seconds = time.tv_sec;
